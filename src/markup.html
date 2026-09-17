@@ -1,0 +1,148 @@
+<div class="wrap">
+
+<header class="top">
+  <div class="brand"><h1>FTC Sim Bench</h1><span class="ver">CAD × OPMODE · v2.0</span></div>
+  <p class="tagline">Drop in any robot's CAD and any OpMode. The bench reads the assembly, interprets your code, and lets you drive the result &mdash; base, arm and all.</p>
+</header>
+
+<div class="zone-label"><span class="n">1</span><h2>Bench</h2><span class="hint">CAD in, code in, cross-check out</span></div>
+
+<div class="bench">
+  <div class="stack">
+    <section class="panel">
+      <div class="phead"><h2>Inputs</h2><span class="spacer"></span><span class="pill" id="unitPill">&mdash;</span></div>
+      <div class="pbody" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="drop ok" id="cadDrop" tabindex="0" role="button" aria-label="Load a STEP CAD file">
+          <div class="dt">CAD &mdash; STEP / STP</div>
+          <div class="ds" id="cadStatus">sample: fulll.step (measured)</div>
+        </div>
+        <input type="file" id="cadFile" accept=".step,.stp,.STEP,.STP" hidden>
+        <div class="drop ok" id="codeDrop" tabindex="0" role="button" aria-label="Load a Java OpMode file">
+          <div class="dt">OpMode &mdash; .java</div>
+          <div class="ds" id="codeStatus">WORKSHOPCODE.java</div>
+        </div>
+        <input type="file" id="codeFile" accept=".java,.txt" hidden>
+        <textarea class="srcbox" id="srcbox" spellcheck="false" aria-label="OpMode source"></textarea>
+        <div class="btnrow">
+          <button class="primary" id="reparse">Re-analyze</button>
+          <button id="resetSample">Sample arm</button>
+          <button id="loadDrive">Sample drivetrain</button>
+        </div>
+      </div>
+      <div class="trust">
+        <span class="lb">Hardware truth</span>
+        <div class="seg" id="trustSeg">
+          <button data-trust="code" class="on">code</button><button data-trust="cad">CAD</button>
+        </div>
+        <span class="meta" id="trustNote" style="flex:1 1 100%">Servo/motor type comes from your declarations and comments. The CAD is used for geometry only.</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Hardware map</h2><span class="spacer"></span><span class="pill" id="mapPill">&mdash;</span></div>
+      <div style="padding:4px 6px 8px; overflow-x:auto"><table class="grid" id="mapTable"></table></div>
+      <p class="meta" style="padding:0 13px 12px">Every device your code asks <code>hardwareMap</code> for, matched to a mechanism in the CAD. Override the mechanism or type the real lever length if you've changed the build.</p>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Assembly</h2><span class="spacer"></span><span class="pill" id="partPill">&mdash;</span></div>
+      <div style="padding:4px 6px 10px; max-height:210px; overflow:auto"><table class="grid" id="treeTable"></table></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="phead"><h2>Robot</h2><span class="spacer"></span>
+        <span class="pill" id="geoPill">&mdash;</span>
+        <div class="seg" id="viewSeg"><button data-v="iso" class="on">iso</button><button data-v="front">front</button><button data-v="side">side</button><button data-v="top">top</button></div>
+      </div>
+      <div style="padding:13px">
+        <div class="viewport" id="viewport">
+          <div class="vp-tag tl" id="vpTitle">&mdash;</div>
+          <div class="vp-legend" id="vpLegend"></div>
+          <div class="vp-tag bl">drag to orbit · scroll to zoom</div>
+          <div class="vp-tag br" id="vpDims">&mdash;</div>
+        </div>
+      </div>
+      <div class="slidebox"><label for="massSlider">Payload at end effector</label>
+        <input type="range" id="massSlider" min="0" max="500" step="10" value="180">
+        <span class="v" id="massVal">180 g</span></div>
+      <div class="slidebox"><label for="dutySlider">Usable / stall torque</label>
+        <input type="range" id="dutySlider" min="10" max="60" step="1" value="30">
+        <span class="v" id="dutyVal">30 %</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Rig</h2><span class="spacer"></span>
+        <span class="pill" id="guessPill">&mdash;</span>
+        <span class="pill" id="rigPill">&mdash;</span>
+        <button id="addJoint" style="padding:3px 9px;font-size:11px">+ Add joint</button>
+      </div>
+      <div style="padding:4px 6px 6px; overflow-x:auto"><table class="grid" id="rigTable"></table></div>
+      <div id="rigChain"></div>
+      <div class="slidebox"><label for="turretSlider">Turret radius</label>
+        <input type="range" id="turretSlider" min="15" max="250" step="5" value="55">
+        <span class="v" id="turretVal">55 %</span></div>
+      <p class="meta" style="padding:6px 13px 10px">The rig is the model everything else runs on, and it is <b>yours</b> &mdash; detection only seeds it. Anything the CAD didn't group can be added by hand and placed on any part in the assembly. Edits save automatically and reload with this CAD.</p>
+      <div class="rigio">
+        <div class="rigio-head">
+          <span>Portable rig &mdash; paste into your repo next to the OpMode</span>
+          <span class="spacer" style="margin-left:auto"></span>
+          <button id="rigCopy" style="padding:3px 9px;font-size:11px">Copy</button>
+          <button id="rigApply" style="padding:3px 9px;font-size:11px">Apply</button>
+          <button id="rigReset" style="padding:3px 9px;font-size:11px">Re-detect</button>
+        </div>
+        <textarea id="rigJson" class="srcbox" style="height:104px" spellcheck="false" aria-label="Rig JSON"></textarea>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Actuators</h2><span class="spacer"></span><span class="pill" id="tickPill">idle</span></div>
+      <div class="gauges" id="gauges"></div>
+    </section>
+  </div>
+
+  <div class="stack diag-col">
+    <section class="panel">
+      <div class="phead"><h2>Diagnostics</h2><span class="spacer"></span><span class="pill" id="verdictPill">&mdash;</span></div>
+      <div class="score" id="score"></div>
+      <div id="findings"></div>
+      <div id="ignoredWrap"></div>
+    </section>
+  </div>
+</div>
+
+<div class="zone-label"><span class="n">2</span><h2>Drive</h2><span class="hint">press a button &mdash; see exactly what it commands</span></div>
+
+<div class="drive">
+  <section class="panel">
+    <div class="phead"><h2>Gamepad</h2><span class="spacer"></span>
+      <span class="pill" id="hwPad">no USB pad</span>
+      <div class="seg" id="padSeg"><button data-pad="1">gamepad1</button><button data-pad="2" class="on">gamepad2</button></div>
+    </div>
+    <div class="padwrap" id="padwrap"></div>
+    <p class="meta" style="padding:0 13px 10px; text-align:center">Drag the sticks. Keyboard: <code>A B X Y</code>, <code>Q</code>/<code>E</code> bumpers, arrows for the d-pad, <code>I J K L</code> for the left stick, <code>U</code>/<code>O</code> to turn.</p>
+    <div class="bindlist" id="bindlist"></div>
+  </section>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="phead"><h2>Torque angle</h2><span class="spacer"></span><span class="pill" id="mechPill">side elevation</span></div>
+      <div class="mech" id="mech"></div>
+    </section>
+    <section class="panel">
+      <div class="phead"><h2>Driver Station telemetry</h2><span class="spacer"></span><span class="pill live">live</span></div>
+      <div class="ds-panel" id="dsPanel"></div>
+    </section>
+  </div>
+</div>
+
+<footer class="foot">
+  <b>What it actually does</b>
+  The bench does not compile or run your OpMode. It parses the loop into a statement tree &mdash; assignments, <code>if</code>/<code>else</code>, and device calls with real arithmetic on gamepad axes &mdash; and interprets that tree at 50&nbsp;Hz against a hardware model. Because it interprets rather than pattern-matches, rising-edge latches, stick mixing and drivetrain maths all behave the way they will on the robot.
+  <b>Where the numbers come from</b>
+  Lever arms, joint axes and the kinematic chain are measured from your STEP assembly. Torque and speed figures are published manufacturer ballparks; the payload and duty sliders let you re-run the sums with your own assumptions, and any lever you've physically changed can be typed straight into the hardware map. Treat the verdicts as a pointer to the joint worth measuring, not a replacement for measuring it.
+  <b>What it can't check</b>
+  Robot Controller configuration names. Nothing in a CAD file can confirm those &mdash; they still have to match your Driver Station config by hand, including case.
+</footer>
+</div>

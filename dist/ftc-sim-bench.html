@@ -1,0 +1,3225 @@
+<title>FTC Sim Bench</title>
+<meta name="description" content="Drop in any FTC robot's STEP CAD and any OpMode. The bench reads the assembly, interprets the code at 50 Hz, and lets you drive the result with a virtual gamepad.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg:#F2F4F7; --panel:#FFFFFF; --panel-2:#F7F9FB; --line:#D8DEE7; --line-2:#E8ECF2;
+  --tx:#151B23; --tx-2:#4C5866; --tx-3:#7A8798;
+  --accent:#1E6FE0; --accent-soft:#E3EDFC; --accent-line:#9EC2F5;
+  --pass:#1E8E63; --pass-soft:#DFF3EA;
+  --warn:#9A6A05; --warn-soft:#FBEFD5;
+  --fail:#C0392E; --fail-soft:#FBE4E1;
+  --viewport:#0E1218;
+  --shadow:0 1px 2px rgba(16,24,36,.06), 0 4px 14px rgba(16,24,36,.05);
+  --mono:'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --cond:'Barlow Semi Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --body:'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1218; --panel:#161C24; --panel-2:#1B222B; --line:#28323E; --line-2:#212A34;
+    --tx:#DFE6EE; --tx-2:#9AA7B6; --tx-3:#6C7B8C;
+    --accent:#4D9FFF; --accent-soft:#12243B; --accent-line:#2C568C;
+    --pass:#3FB68B; --pass-soft:#11291F;
+    --warn:#E0A42E; --warn-soft:#2C2312;
+    --fail:#E4574E; --fail-soft:#2E1715;
+    --viewport:#0A0D12;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1218; --panel:#161C24; --panel-2:#1B222B; --line:#28323E; --line-2:#212A34;
+  --tx:#DFE6EE; --tx-2:#9AA7B6; --tx-3:#6C7B8C;
+  --accent:#4D9FFF; --accent-soft:#12243B; --accent-line:#2C568C;
+  --pass:#3FB68B; --pass-soft:#11291F;
+  --warn:#E0A42E; --warn-soft:#2C2312;
+  --fail:#E4574E; --fail-soft:#2E1715;
+  --viewport:#0A0D12;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--tx); font-family:var(--body); font-size:14px; line-height:1.5;}
+.wrap{max-width:1520px; margin:0 auto; padding:20px 22px 64px;}
+
+header.top{display:flex; align-items:flex-end; gap:20px; flex-wrap:wrap; padding-bottom:14px; border-bottom:2px solid var(--tx); margin-bottom:20px;}
+.brand{display:flex; align-items:baseline; gap:11px;}
+.brand h1{font-family:var(--cond); font-weight:700; font-size:31px; letter-spacing:-.015em; margin:0; text-wrap:balance;}
+.brand .ver{font-family:var(--mono); font-size:10px; color:var(--tx-3); letter-spacing:.06em; padding-bottom:3px;}
+.tagline{font-family:var(--cond); font-size:15px; color:var(--tx-2); max-width:48ch; margin-left:auto; text-align:right; line-height:1.35;}
+
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:5px;}
+.phead{display:flex; align-items:center; gap:9px; padding:9px 13px; border-bottom:1px solid var(--line-2); flex-wrap:wrap;}
+.phead h2{font-family:var(--cond); font-size:12px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--tx-2); margin:0;}
+.phead .spacer{margin-left:auto}
+.pbody{padding:13px}
+
+.zone-label{display:flex; align-items:center; gap:12px; margin:30px 0 13px; flex-wrap:wrap;}
+.zone-label .n{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--panel); background:var(--tx); border-radius:3px; padding:2px 6px; letter-spacing:.08em;}
+.zone-label h2{font-family:var(--cond); font-size:19px; font-weight:600; margin:0;}
+.zone-label .hint{font-size:12.5px; color:var(--tx-3); margin-left:auto; font-family:var(--cond);}
+
+.bench{display:grid; grid-template-columns:300px minmax(0,1fr) 384px; gap:14px; align-items:start;}
+@media (max-width:1240px){ .bench{grid-template-columns:280px minmax(0,1fr);} .bench .diag-col{grid-column:1/-1;} }
+@media (max-width:860px){ .bench{grid-template-columns:minmax(0,1fr);} .bench .diag-col{grid-column:auto;} }
+.drive{display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:14px; align-items:start;}
+@media (max-width:1000px){ .drive{grid-template-columns:minmax(0,1fr);} }
+.stack{display:flex; flex-direction:column; gap:14px;}
+
+.drop{border:1.5px dashed var(--line); border-radius:5px; padding:14px 12px; text-align:center; cursor:pointer; background:var(--panel-2); transition:border-color .14s, background .14s;}
+.drop:hover,.drop:focus-visible{border-color:var(--accent); background:var(--accent-soft); outline:none;}
+.drop.armed{border-color:var(--accent); background:var(--accent-soft);}
+.drop.ok{border-style:solid; border-color:var(--pass); background:var(--pass-soft); text-align:left;}
+.drop.bad{border-style:solid; border-color:var(--warn); background:var(--warn-soft); text-align:left;}
+.drop .dt{font-family:var(--cond); font-weight:600; font-size:14px;}
+.drop .ds{font-size:11.5px; color:var(--tx-3); font-family:var(--mono); margin-top:3px; word-break:break-word;}
+.drop.ok .ds{color:var(--pass)} .drop.bad .ds{color:var(--warn)}
+
+.srcbox{width:100%; height:132px; font-family:var(--mono); font-size:11px; line-height:1.55; background:var(--panel-2); color:var(--tx); border:1px solid var(--line); border-radius:4px; padding:9px; resize:vertical; tab-size:2;}
+.srcbox:focus{outline:2px solid var(--accent); outline-offset:-1px; border-color:transparent;}
+
+button{font-family:var(--cond); font-size:13px; font-weight:600; cursor:pointer; border-radius:4px; border:1px solid var(--line); background:var(--panel-2); color:var(--tx); padding:6px 11px; transition:background .13s,border-color .13s,color .13s;}
+button:hover{border-color:var(--accent); color:var(--accent);}
+button:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+button.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+button.primary:hover{filter:brightness(1.08); color:#fff;}
+.btnrow{display:flex; gap:7px; flex-wrap:wrap;}
+
+.seg{display:inline-flex; border:1px solid var(--line); border-radius:4px; overflow:hidden;}
+.seg button{border:none; border-radius:0; padding:4px 11px; font-family:var(--mono); font-size:10.5px;}
+.seg button.on{background:var(--accent); color:#fff;}
+.seg button.on:hover{color:#fff;}
+
+table.grid{width:100%; border-collapse:collapse; font-size:12.5px;}
+table.grid th{font-family:var(--cond); font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:.09em; color:var(--tx-3); text-align:left; padding:0 7px 6px; border-bottom:1px solid var(--line-2); white-space:nowrap;}
+table.grid td{padding:6px 7px; border-bottom:1px solid var(--line-2); vertical-align:middle;}
+table.grid tr:last-child td{border-bottom:none;}
+td.mono,.mono{font-family:var(--mono); font-size:11.5px; font-variant-numeric:tabular-nums;}
+.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right;}
+select,input.mini{font-family:var(--mono); font-size:11px; background:var(--panel-2); color:var(--tx); border:1px solid var(--line); border-radius:3px; padding:3px 5px; max-width:100%;}
+input.mini{width:56px; text-align:right;}
+select:focus-visible,input.mini:focus-visible{outline:2px solid var(--accent); outline-offset:1px;}
+
+.tag{display:inline-block; font-family:var(--mono); font-size:9.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; padding:2px 5px; border-radius:3px; white-space:nowrap;}
+.tag.torque{background:var(--accent-soft); color:var(--accent); border:1px solid var(--accent-line);}
+.tag.speed{background:var(--warn-soft); color:var(--warn); border:1px solid var(--warn);}
+.tag.motor{background:var(--pass-soft); color:var(--pass); border:1px solid var(--pass);}
+.tag.mut{background:var(--panel-2); color:var(--tx-3); border:1px solid var(--line);}
+
+.viewport{position:relative; background:var(--viewport); border-radius:4px; overflow:hidden; height:392px;}
+.viewport canvas{display:block; width:100%; height:100%;}
+.vp-tag{position:absolute; font-family:var(--mono); font-size:10px; color:#7C8B9E; letter-spacing:.04em; pointer-events:none;}
+.vp-tag.tl{top:9px; left:11px} .vp-tag.bl{bottom:9px; left:11px} .vp-tag.br{bottom:9px; right:11px; text-align:right;}
+.vp-legend{position:absolute; top:9px; right:11px; display:flex; flex-direction:column; gap:4px; align-items:flex-end; pointer-events:none;}
+.vp-legend span{font-family:var(--mono); font-size:10px; display:flex; align-items:center; gap:5px; color:#9FB0C4;}
+.vp-legend i{width:8px; height:8px; border-radius:2px; display:block;}
+.vp-stall{position:absolute; top:38px; left:50%; transform:translateX(-50%); font-family:var(--mono); font-size:10.5px; font-weight:700;
+  color:#fff; background:#C0392E; border-radius:3px; padding:3px 9px; letter-spacing:.06em; pointer-events:none;}
+
+.score{display:flex; gap:7px; padding:11px 13px; border-bottom:1px solid var(--line-2);}
+.score div{flex:1; text-align:center; padding:7px 4px; border-radius:4px; border:1px solid var(--line-2); background:var(--panel-2);}
+.score .k{font-family:var(--mono); font-size:22px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums;}
+.score .l{font-family:var(--cond); font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--tx-3); margin-top:4px;}
+.score .s-fail .k{color:var(--fail)} .score .s-warn .k{color:var(--warn)} .score .s-pass .k{color:var(--pass)}
+
+.finding{border-left:3px solid var(--line); padding:11px 13px; border-bottom:1px solid var(--line-2); position:relative;}
+.finding:last-child{border-bottom:none}
+.finding.fail{border-left-color:var(--fail); background:linear-gradient(90deg,var(--fail-soft),transparent 62%);}
+.finding.warn{border-left-color:var(--warn);}
+.finding.pass{border-left-color:var(--pass);}
+.finding.info{border-left-color:var(--accent-line);}
+.fhead{display:flex; align-items:baseline; gap:8px; margin-bottom:4px;}
+.fsev{font-family:var(--mono); font-size:9.5px; font-weight:700; letter-spacing:.09em; flex:none;}
+.fail .fsev{color:var(--fail)} .warn .fsev{color:var(--warn)} .pass .fsev{color:var(--pass)} .info .fsev{color:var(--accent)}
+.ftitle{font-family:var(--cond); font-weight:600; font-size:14.5px; line-height:1.25;}
+.fignore{margin-left:auto; flex:none; font-family:var(--cond); font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+  padding:2px 7px; border-radius:3px; border:1px solid var(--line); background:transparent; color:var(--tx-3);}
+.fignore:hover{border-color:var(--tx-2); color:var(--tx);}
+.fbody{font-size:12.8px; color:var(--tx-2); line-height:1.5;}
+.fbody code{font-family:var(--mono); font-size:11.5px; background:var(--panel-2); border:1px solid var(--line-2); border-radius:3px; padding:.5px 4px; color:var(--tx);}
+.fbody b{color:var(--tx); font-weight:600;}
+.fmath{font-family:var(--mono); font-size:10.5px; line-height:1.55; color:var(--tx-2); background:var(--panel-2); border:1px solid var(--line-2); border-radius:3px; padding:7px 9px; margin-top:7px; overflow-x:auto; white-space:pre; font-variant-numeric:tabular-nums;}
+.ffix{font-size:12.5px; margin-top:7px; padding-top:7px; border-top:1px dashed var(--line);}
+.ffix b{font-family:var(--cond); text-transform:uppercase; font-size:10.5px; letter-spacing:.09em; color:var(--tx-3); display:block; margin-bottom:2px;}
+.ignored-head{display:flex; align-items:center; gap:9px; padding:9px 13px; border-top:1px solid var(--line); background:var(--panel-2); cursor:pointer;}
+.ignored-head h3{font-family:var(--cond); font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--tx-3); margin:0;}
+.ign-row{display:flex; align-items:center; gap:9px; padding:7px 13px; border-top:1px solid var(--line-2); font-size:12.5px; color:var(--tx-3);}
+.ign-row .t{flex:1; text-decoration:line-through;}
+
+.chainrow{padding:7px 13px; border-top:1px solid var(--line-2); font-size:12.5px; line-height:1.45;}
+.chainrow .cn{font-family:var(--cond); font-weight:600; font-size:13.5px;}
+.chainrow .cj{font-family:var(--mono); font-size:10px; color:var(--tx-3); text-transform:uppercase; letter-spacing:.06em;}
+.chainrow .cc{color:var(--tx-2);}
+.chainrow .cc b{color:var(--tx); font-weight:600;}
+.chainrow code{font-family:var(--mono); font-size:11px; background:var(--panel-2); border:1px solid var(--line-2); border-radius:3px; padding:.5px 4px;}
+input.rigname{font-family:var(--mono); font-size:11px; background:transparent; color:var(--tx); border:1px solid transparent; border-radius:3px; padding:2px 4px; width:82px;}
+input.rigname:hover{border-color:var(--line)}
+input.rigname:focus{outline:2px solid var(--accent); outline-offset:0; border-color:transparent; background:var(--panel-2);}
+button.dirbtn{padding:1px 8px; font-family:var(--mono); font-size:12px; line-height:1.3;}
+.rigio{border-top:1px solid var(--line-2); padding:9px 13px 13px;}
+.rigio-head{display:flex; align-items:center; gap:7px; margin-bottom:7px; font-family:var(--cond); font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--tx-3);}
+.guess{display:inline-block; width:5px; height:5px; border-radius:50%; background:var(--warn); margin-left:4px; vertical-align:middle;}
+.guess.set{background:var(--pass)}
+tr.manual td{background:var(--accent-soft)}
+button.rmbtn{padding:1px 6px; font-size:11px; line-height:1.2; color:var(--tx-3);}
+button.rmbtn:hover{border-color:var(--fail); color:var(--fail);}
+
+.padwrap{display:flex; flex-direction:column; align-items:center; gap:9px; padding:15px 13px 6px;}
+.padsvg{width:100%; max-width:432px; height:auto; display:block; touch-action:none;}
+.padsvg .shell{fill:var(--panel-2); stroke:var(--line); stroke-width:1.5;}
+.padsvg .btn{fill:var(--panel); stroke:var(--tx-3); stroke-width:1.3; cursor:pointer;}
+.padsvg .btn.bound{fill:var(--accent-soft); stroke:var(--accent);}
+.padsvg .btn.down{fill:var(--accent); stroke:var(--accent);}
+.padsvg .btn:focus-visible{outline:none; stroke:var(--tx); stroke-width:2.6;}
+.padsvg .lbl{font-family:var(--mono); font-size:9px; font-weight:700; fill:var(--tx-2); pointer-events:none; text-anchor:middle; dominant-baseline:central;}
+.padsvg .btn.down + .lbl{fill:#fff;}
+.padsvg .stickwell{fill:var(--panel); stroke:var(--tx-3); stroke-width:1.3; cursor:grab;}
+.padsvg .stickwell.bound{stroke:var(--accent)}
+.padsvg .stickknob{fill:var(--accent); stroke:none; pointer-events:none;}
+.padsvg .cap{font-family:var(--cond); font-size:8.5px; font-weight:600; letter-spacing:.09em; fill:var(--tx-3); text-anchor:middle; text-transform:uppercase;}
+
+.bindlist{border-top:1px solid var(--line-2); max-height:250px; overflow-y:auto;}
+.bindrow{display:grid; grid-template-columns:64px 1fr; gap:9px; padding:6px 13px; border-bottom:1px solid var(--line-2); align-items:center; font-size:12.5px;}
+.bindrow:last-child{border-bottom:none}
+.bindrow.active{background:var(--accent-soft);}
+.bindrow .bk{font-family:var(--mono); font-size:10px; font-weight:700; text-align:center; border:1px solid var(--line); border-radius:3px; padding:2px 0; color:var(--tx-2); background:var(--panel-2);}
+.bindrow.active .bk{border-color:var(--accent); color:var(--accent);}
+.bindrow .bd b{font-weight:600}
+.bindrow .bd .edge{font-family:var(--mono); font-size:9.5px; color:var(--tx-3); display:block;}
+
+.gauges{display:grid; grid-template-columns:repeat(auto-fit,minmax(126px,1fr)); gap:11px; padding:13px;}
+.gauge{border:1px solid var(--line-2); border-radius:4px; padding:9px 7px 7px; text-align:center; background:var(--panel-2); position:relative;}
+.gauge.stalled{border-color:var(--fail); background:var(--fail-soft);}
+.gauge svg{width:100%; height:auto; display:block;}
+.gauge .gname{font-family:var(--mono); font-size:11px; font-weight:700;}
+.gauge .gsub{font-family:var(--cond); font-size:10.5px; color:var(--tx-3); text-transform:uppercase; letter-spacing:.07em;}
+.gauge .stallflag{position:absolute; top:6px; right:6px; font-family:var(--mono); font-size:8.5px; font-weight:700; color:#fff; background:var(--fail); border-radius:2px; padding:1px 4px;}
+.g-track{fill:none; stroke:var(--line); stroke-width:7;}
+.g-range{fill:none; stroke:var(--accent-line); stroke-width:7;}
+.g-fill{fill:none; stroke:var(--accent); stroke-width:7;}
+.g-cmd{stroke:var(--tx-3); stroke-width:1.5; stroke-dasharray:2 2;}
+.stalled .g-fill{stroke:var(--fail)}
+
+.mech{background:var(--viewport); border-radius:4px; margin:0 13px 13px;}
+.mech svg{display:block; width:100%; height:auto;}
+.ds-panel{background:#0B0F14; border-radius:4px; margin:0 13px 13px; padding:11px 13px; font-family:var(--mono); font-size:11.5px; line-height:1.72; color:#C9D6E4; overflow-x:auto;}
+.ds-panel .dsk{color:#7E8FA3;} .ds-panel .dsv{color:#7BD9B4; font-variant-numeric:tabular-nums;}
+.ds-panel .dshr{color:#3A4756;} .ds-panel .dsl{color:#9FB0C4;}
+
+.meta{font-size:12px; color:var(--tx-3); line-height:1.5;}
+.meta code{font-family:var(--mono); font-size:11px;}
+footer.foot{margin-top:34px; padding-top:15px; border-top:1px solid var(--line); font-size:12px; color:var(--tx-3); line-height:1.6; max-width:82ch;}
+footer.foot b{font-family:var(--cond); text-transform:uppercase; letter-spacing:.08em; font-size:11px; color:var(--tx-2); display:block; margin-bottom:3px; margin-top:11px;}
+footer.foot b:first-child{margin-top:0}
+
+.pill{font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:9px; border:1px solid var(--line); color:var(--tx-3); background:var(--panel-2); white-space:nowrap;}
+.pill.live{border-color:var(--pass); color:var(--pass);}
+.pill.warnp{border-color:var(--warn); color:var(--warn);}
+.slidebox{display:flex; align-items:center; gap:9px; padding:7px 13px; border-top:1px solid var(--line-2); font-size:12px;}
+.slidebox label{font-family:var(--cond); font-size:11.5px; color:var(--tx-2); white-space:nowrap;}
+.slidebox input[type=range]{flex:1; accent-color:var(--accent); min-width:60px;}
+.slidebox .v{font-family:var(--mono); font-size:11.5px; font-variant-numeric:tabular-nums; min-width:56px; text-align:right;}
+.trust{display:flex; align-items:center; gap:8px; padding:9px 13px; border-top:1px solid var(--line-2); flex-wrap:wrap;}
+.trust .lb{font-family:var(--cond); font-size:11.5px; color:var(--tx-2);}
+@media (prefers-reduced-motion:reduce){ *{transition:none !important;} }
+</style>
+<div class="wrap">
+
+<header class="top">
+  <div class="brand"><h1>FTC Sim Bench</h1><span class="ver">CAD × OPMODE · v2.0</span></div>
+  <p class="tagline">Drop in any robot's CAD and any OpMode. The bench reads the assembly, interprets your code, and lets you drive the result &mdash; base, arm and all.</p>
+</header>
+
+<div class="zone-label"><span class="n">1</span><h2>Bench</h2><span class="hint">CAD in, code in, cross-check out</span></div>
+
+<div class="bench">
+  <div class="stack">
+    <section class="panel">
+      <div class="phead"><h2>Inputs</h2><span class="spacer"></span><span class="pill" id="unitPill">&mdash;</span></div>
+      <div class="pbody" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="drop ok" id="cadDrop" tabindex="0" role="button" aria-label="Load a STEP CAD file">
+          <div class="dt">CAD &mdash; STEP / STP</div>
+          <div class="ds" id="cadStatus">sample: fulll.step (measured)</div>
+        </div>
+        <input type="file" id="cadFile" accept=".step,.stp,.STEP,.STP" hidden>
+        <div class="drop ok" id="codeDrop" tabindex="0" role="button" aria-label="Load a Java OpMode file">
+          <div class="dt">OpMode &mdash; .java</div>
+          <div class="ds" id="codeStatus">WORKSHOPCODE.java</div>
+        </div>
+        <input type="file" id="codeFile" accept=".java,.txt" hidden>
+        <textarea class="srcbox" id="srcbox" spellcheck="false" aria-label="OpMode source"></textarea>
+        <div class="btnrow">
+          <button class="primary" id="reparse">Re-analyze</button>
+          <button id="resetSample">Sample arm</button>
+          <button id="loadDrive">Sample drivetrain</button>
+        </div>
+      </div>
+      <div class="trust">
+        <span class="lb">Hardware truth</span>
+        <div class="seg" id="trustSeg">
+          <button data-trust="code" class="on">code</button><button data-trust="cad">CAD</button>
+        </div>
+        <span class="meta" id="trustNote" style="flex:1 1 100%">Servo/motor type comes from your declarations and comments. The CAD is used for geometry only.</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Hardware map</h2><span class="spacer"></span><span class="pill" id="mapPill">&mdash;</span></div>
+      <div style="padding:4px 6px 8px; overflow-x:auto"><table class="grid" id="mapTable"></table></div>
+      <p class="meta" style="padding:0 13px 12px">Every device your code asks <code>hardwareMap</code> for, matched to a mechanism in the CAD. Override the mechanism or type the real lever length if you've changed the build.</p>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Assembly</h2><span class="spacer"></span><span class="pill" id="partPill">&mdash;</span></div>
+      <div style="padding:4px 6px 10px; max-height:210px; overflow:auto"><table class="grid" id="treeTable"></table></div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="phead"><h2>Robot</h2><span class="spacer"></span>
+        <span class="pill" id="geoPill">&mdash;</span>
+        <div class="seg" id="viewSeg"><button data-v="iso" class="on">iso</button><button data-v="front">front</button><button data-v="side">side</button><button data-v="top">top</button></div>
+      </div>
+      <div style="padding:13px">
+        <div class="viewport" id="viewport">
+          <div class="vp-tag tl" id="vpTitle">&mdash;</div>
+          <div class="vp-legend" id="vpLegend"></div>
+          <div class="vp-tag bl">drag to orbit · scroll to zoom</div>
+          <div class="vp-tag br" id="vpDims">&mdash;</div>
+        </div>
+      </div>
+      <div class="slidebox"><label for="massSlider">Payload at end effector</label>
+        <input type="range" id="massSlider" min="0" max="500" step="10" value="180">
+        <span class="v" id="massVal">180 g</span></div>
+      <div class="slidebox"><label for="dutySlider">Usable / stall torque</label>
+        <input type="range" id="dutySlider" min="10" max="60" step="1" value="30">
+        <span class="v" id="dutyVal">30 %</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Rig</h2><span class="spacer"></span>
+        <span class="pill" id="guessPill">&mdash;</span>
+        <span class="pill" id="rigPill">&mdash;</span>
+        <button id="addJoint" style="padding:3px 9px;font-size:11px">+ Add joint</button>
+      </div>
+      <div style="padding:4px 6px 6px; overflow-x:auto"><table class="grid" id="rigTable"></table></div>
+      <div id="rigChain"></div>
+      <div class="slidebox"><label for="turretSlider">Turret radius</label>
+        <input type="range" id="turretSlider" min="15" max="250" step="5" value="55">
+        <span class="v" id="turretVal">55 %</span></div>
+      <p class="meta" style="padding:6px 13px 10px">The rig is the model everything else runs on, and it is <b>yours</b> &mdash; detection only seeds it. Anything the CAD didn't group can be added by hand and placed on any part in the assembly. Edits save automatically and reload with this CAD.</p>
+      <div class="rigio">
+        <div class="rigio-head">
+          <span>Portable rig &mdash; paste into your repo next to the OpMode</span>
+          <span class="spacer" style="margin-left:auto"></span>
+          <button id="rigCopy" style="padding:3px 9px;font-size:11px">Copy</button>
+          <button id="rigApply" style="padding:3px 9px;font-size:11px">Apply</button>
+          <button id="rigReset" style="padding:3px 9px;font-size:11px">Re-detect</button>
+        </div>
+        <textarea id="rigJson" class="srcbox" style="height:104px" spellcheck="false" aria-label="Rig JSON"></textarea>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Actuators</h2><span class="spacer"></span><span class="pill" id="tickPill">idle</span></div>
+      <div class="gauges" id="gauges"></div>
+    </section>
+  </div>
+
+  <div class="stack diag-col">
+    <section class="panel">
+      <div class="phead"><h2>Diagnostics</h2><span class="spacer"></span><span class="pill" id="verdictPill">&mdash;</span></div>
+      <div class="score" id="score"></div>
+      <div id="findings"></div>
+      <div id="ignoredWrap"></div>
+    </section>
+  </div>
+</div>
+
+<div class="zone-label"><span class="n">2</span><h2>Drive</h2><span class="hint">press a button &mdash; see exactly what it commands</span></div>
+
+<div class="drive">
+  <section class="panel">
+    <div class="phead"><h2>Gamepad</h2><span class="spacer"></span>
+      <span class="pill" id="hwPad">no USB pad</span>
+      <div class="seg" id="padSeg"><button data-pad="1">gamepad1</button><button data-pad="2" class="on">gamepad2</button></div>
+    </div>
+    <div class="padwrap" id="padwrap"></div>
+    <p class="meta" style="padding:0 13px 10px; text-align:center">Drag the sticks. Keyboard: <code>A B X Y</code>, <code>Q</code>/<code>E</code> bumpers, arrows for the d-pad, <code>I J K L</code> for the left stick, <code>U</code>/<code>O</code> to turn.</p>
+    <div class="bindlist" id="bindlist"></div>
+  </section>
+
+  <div class="stack">
+    <section class="panel">
+      <div class="phead"><h2>Torque angle</h2><span class="spacer"></span><span class="pill" id="mechPill">side elevation</span></div>
+      <div class="mech" id="mech"></div>
+    </section>
+    <section class="panel">
+      <div class="phead"><h2>Driver Station telemetry</h2><span class="spacer"></span><span class="pill live">live</span></div>
+      <div class="ds-panel" id="dsPanel"></div>
+    </section>
+  </div>
+</div>
+
+<footer class="foot">
+  <b>What it actually does</b>
+  The bench does not compile or run your OpMode. It parses the loop into a statement tree &mdash; assignments, <code>if</code>/<code>else</code>, and device calls with real arithmetic on gamepad axes &mdash; and interprets that tree at 50&nbsp;Hz against a hardware model. Because it interprets rather than pattern-matches, rising-edge latches, stick mixing and drivetrain maths all behave the way they will on the robot.
+  <b>Where the numbers come from</b>
+  Lever arms, joint axes and the kinematic chain are measured from your STEP assembly. Torque and speed figures are published manufacturer ballparks; the payload and duty sliders let you re-run the sums with your own assumptions, and any lever you've physically changed can be typed straight into the hardware map. Treat the verdicts as a pointer to the joint worth measuring, not a replacement for measuring it.
+  <b>What it can't check</b>
+  Robot Controller configuration names. Nothing in a CAD file can confirm those &mdash; they still have to match your Driver Station config by hand, including case.
+</footer>
+</div>
+
+<script>
+"use strict";
+// ---- src/hardware.js ----
+/* ============================================================
+   0.  HARDWARE DATABASE
+   Published ballpark figures. Everything here is overridable in
+   the UI, and `guess:true` marks anything inferred rather than known.
+   ============================================================ */
+const G = 9.80665;
+
+const HW_PARTS = {
+  // ---- goBILDA 2000 Series Dual Mode servos (25-tooth spline) ----
+  "2000-0025-0001":{fam:"goBILDA 2000 Dual Mode 25-1",kind:"servo",role:"Speed", stallNm:0.95,sec60:0.12,travelDeg:300},
+  "2000-0025-0002":{fam:"goBILDA 2000 Dual Mode 25-2",kind:"servo",role:"Speed", stallNm:1.40,sec60:0.16,travelDeg:300},
+  "2000-0025-0003":{fam:"goBILDA 2000 Dual Mode 25-3",kind:"servo",role:"Torque",stallNm:2.10,sec60:0.24,travelDeg:300},
+  "2000-0025-0004":{fam:"goBILDA 2000 Dual Mode 25-4",kind:"servo",role:"Torque",stallNm:3.00,sec60:0.32,travelDeg:300},
+  "2000-0025-0005":{fam:"goBILDA 2000 Dual Mode 25-5",kind:"servo",role:"Torque",stallNm:4.20,sec60:0.42,travelDeg:300},
+  // ---- REV ----
+  "REV-41-1097":{fam:"REV Smart Robot Servo",kind:"servo",role:"Torque",stallNm:1.86,sec60:0.28,travelDeg:270},
+  "REV-41-1291":{fam:"REV HD Hex Motor",kind:"motor",role:"Motor",stallNm:0.105,rpm:6000,ratio:1},
+  "REV-41-1300":{fam:"REV Core Hex Motor",kind:"motor",role:"Motor",stallNm:3.20,rpm:125,ratio:72}
+};
+
+/* goBILDA Yellow Jacket planetary gearmotors: the trailing group of the part
+   number is the nominal reduction, which fixes both speed and stall torque. */
+const YELLOW_JACKET = {
+  3:{ratio:3.7,rpm:1620,nm:0.46},   5:{ratio:5.2,rpm:1150,nm:0.65},
+  13:{ratio:13.7,rpm:435,nm:1.68},  19:{ratio:19.2,rpm:312,nm:2.38},
+  26:{ratio:26.9,rpm:223,nm:3.34},  27:{ratio:26.9,rpm:223,nm:3.34},
+  50:{ratio:50.9,rpm:117,nm:6.08},  51:{ratio:50.9,rpm:117,nm:6.08},
+  71:{ratio:71.2,rpm:84,nm:8.53},   100:{ratio:99.5,rpm:60,nm:11.57},
+  139:{ratio:139.0,rpm:43,nm:16.08},188:{ratio:188.0,rpm:30,nm:21.77},
+  223:{ratio:223.0,rpm:27,nm:24.60}
+};
+
+const GENERIC = {
+  Torque:{fam:"generic torque servo",kind:"servo",role:"Torque",stallNm:2.10,sec60:0.24,travelDeg:300,guess:true},
+  Speed: {fam:"generic speed servo", kind:"servo",role:"Speed", stallNm:1.40,sec60:0.16,travelDeg:300,guess:true},
+  Servo: {fam:"unspecified servo",   kind:"servo",role:"Servo", stallNm:1.50,sec60:0.18,travelDeg:300,guess:true},
+  Motor: {fam:"unspecified motor",   kind:"motor",role:"Motor", stallNm:2.38,rpm:312,ratio:19.2,guess:true},
+  CRServo:{fam:"continuous servo",   kind:"crservo",role:"CR",  stallNm:1.40,rpm:100,guess:true}
+};
+
+/* Identify an actuator from a part number and/or the CAD part name. */
+function hwFromPart(pn, name){
+  name = name || "";
+  if(pn && HW_PARTS[pn]) return Object.assign({part:pn}, HW_PARTS[pn]);
+  let m;
+  if(pn && (m=/^(520[234])-\d{4}-(\d{1,4})$/.exec(pn))){
+    const yj = YELLOW_JACKET[+m[2]];
+    if(yj) return {part:pn, fam:"goBILDA Yellow Jacket "+m[1]+"  "+yj.ratio+":1",
+                   kind:"motor", role:"Motor", stallNm:yj.nm, rpm:yj.rpm, ratio:yj.ratio};
+    return {part:pn, fam:"goBILDA Yellow Jacket "+m[1], kind:"motor", role:"Motor",
+            stallNm:GENERIC.Motor.stallNm, rpm:GENERIC.Motor.rpm, ratio:null, guess:true};
+  }
+  /* Name-only matching has to be strict: a real assembly is full of parts
+     called "Motor Sleeve", "Servo Case" and "Motor Port" that are pieces of an
+     actuator model, not actuators. */
+  if(/\b(case|spline|frame|port|horn|mount|sleeve|cover|shaft|gearbox|bracket|clip|screw|nut|washer|bearing|axle|shim|core|label|wire|seal|plate|hub|standoff|beam|channel|wheel|spacer|pin|band|gear|pulley|tube|rod|part)\b/i.test(name)) return null;
+  if(/\bservos?\b/i.test(name)) return Object.assign({part:pn||null, fam:name.trim()}, GENERIC.Servo);
+  if(/\b(motor|gearmotor)s?\b/i.test(name)) return Object.assign({part:pn||null, fam:name.trim()}, GENERIC.Motor);
+  return null;
+}
+
+/* The spec actually used for a device. Precedence is a user setting: with
+   "code" the declared java type and the comment above it win, because the
+   person who wired the robot knows what they installed and the CAD may be
+   older than the build. */
+function specFor(dev, mech, trust){
+  const base = specDetect(dev, mech, trust);
+  const ov = (typeof HW_USER!=="undefined" && HW_USER) ? HW_USER[dev.name] : null;
+  if(!ov) return base;
+  const out=Object.assign({},base);
+  for(const k in ov) if(ov[k]!==undefined && ov[k]!==null) out[k]=ov[k];
+  out.src = "you";
+  if(ov.kind==="motor"&&!ov.rpm&&!base.rpm) out.rpm=GENERIC.Motor.rpm;
+  return out;
+}
+function specDetect(dev, mech, trust){
+  const cadSpec = mech && mech.part ? hwFromPart(mech.part, mech.partName) : null;
+  const wantsMotor = /DcMotor|DcMotorEx/i.test(dev.type||"");
+  const wantsCR = /CRServo/i.test(dev.type||"");
+
+  if(trust === "cad" && cadSpec) return Object.assign({src:"CAD"}, cadSpec);
+
+  // --- code wins ---
+  if(wantsMotor){
+    if(cadSpec && cadSpec.kind === "motor") return Object.assign({src:"CAD part, code type"}, cadSpec);
+    return Object.assign({src:"code"}, GENERIC.Motor);
+  }
+  if(wantsCR) return Object.assign({src:"code"}, GENERIC.CRServo);
+  if(dev.declaredRole){
+    // prefer a real part from the same family that matches the declared role
+    if(cadSpec && cadSpec.kind === "servo"){
+      if(cadSpec.role === dev.declaredRole) return Object.assign({src:"code + CAD"}, cadSpec);
+      // same family, the declared role: pick the variant nearest the typical
+      // figure for that role rather than whichever happens to be listed first
+      const fam = (cadSpec.part||"").slice(0,10);
+      const want = (GENERIC[dev.declaredRole]||GENERIC.Servo).stallNm;
+      let bestP=null, bestD=1e9;
+      for(const p in HW_PARTS){
+        const c = HW_PARTS[p];
+        if(p.slice(0,10)!==fam || c.role!==dev.declaredRole) continue;
+        const d=Math.abs(c.stallNm-want);
+        if(d<bestD){ bestD=d; bestP=p; }
+      }
+      if(bestP) return Object.assign({src:"code", part:bestP}, HW_PARTS[bestP]);
+    }
+    return Object.assign({src:"code"}, GENERIC[dev.declaredRole] || GENERIC.Servo);
+  }
+  if(cadSpec) return Object.assign({src:"CAD"}, cadSpec);
+  return Object.assign({src:"default"}, GENERIC.Servo);
+}
+
+// ---- src/samples.js ----
+/* ============================================================
+   1.  SAMPLES
+   ============================================================ */
+const SAMPLE_JAVA = `package org.firstinspires.ftc.teamcode.pedroPathing;
+
+// ===== IMPORTS =====
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.Servo;
+
+
+@TeleOp(name = "Basic Claw Test")
+public class WORKSHOPCODE extends LinearOpMode {
+
+    // Speed servo that opens and closes the claw
+    Servo claw;
+
+    // Torque servo that moves the arm up and down
+    Servo arm;
+
+    // Torque servo that rotates the arm
+    Servo rotate;
+
+    static final double CLAW_OPEN = 0.20;
+    static final double CLAW_CLOSE = 0.50;
+
+    static final double ARM_DOWN = 0.20;
+    static final double ARM_UP = 0.40;
+
+    double rotatePosition = 0.50;
+    static final double ROTATE_STEP = 0.10;
+    static final double ROTATE_MIN = 0.10;
+    static final double ROTATE_MAX = 0.90;
+
+    boolean lastLeftBumper = false;
+    boolean lastRightBumper = false;
+
+    @Override
+    public void runOpMode() {
+
+        claw = hardwareMap.servo.get("claw");
+        arm = hardwareMap.servo.get("arm");
+        rotate = hardwareMap.servo.get("rotate");
+
+        claw.setPosition(CLAW_OPEN);
+        arm.setPosition(ARM_DOWN);
+        rotate.setPosition(rotatePosition);
+
+        waitForStart();
+
+        while (opModeIsActive()) {
+
+            // A = close claw
+            if (gamepad2.a) {
+                claw.setPosition(CLAW_CLOSE);
+            }
+
+            // B = open claw
+            if (gamepad2.b) {
+                claw.setPosition(CLAW_OPEN);
+            }
+
+            // X = move arm up
+            if (gamepad2.x) {
+                arm.setPosition(ARM_UP);
+            }
+
+            // Y = move arm down
+            if (gamepad2.y) {
+                arm.setPosition(ARM_DOWN);
+            }
+
+            if (gamepad2.right_bumper && !lastRightBumper) {
+                rotatePosition += ROTATE_STEP;
+                if (rotatePosition > ROTATE_MAX) {
+                    rotatePosition = ROTATE_MAX;
+                }
+                rotate.setPosition(rotatePosition);
+            }
+
+            if (gamepad2.left_bumper && !lastLeftBumper) {
+                rotatePosition -= ROTATE_STEP;
+                if (rotatePosition < ROTATE_MIN) {
+                    rotatePosition = ROTATE_MIN;
+                }
+                rotate.setPosition(rotatePosition);
+            }
+
+            lastRightBumper = gamepad2.right_bumper;
+            lastLeftBumper = gamepad2.left_bumper;
+
+            telemetry.addData("Claw Position", claw.getPosition());
+            telemetry.addData("Arm Position", arm.getPosition());
+            telemetry.addData("Rotate Position", rotatePosition);
+
+            telemetry.addLine("");
+            telemetry.addLine("A = Close Claw");
+            telemetry.addLine("B = Open Claw");
+            telemetry.addLine("X = Arm Up");
+            telemetry.addLine("Y = Arm Down");
+            telemetry.addLine("LB = Rotate Left");
+            telemetry.addLine("RB = Rotate Right");
+
+            telemetry.update();
+        }
+    }
+}`;
+
+const DRIVE_JAVA = `package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Servo;
+
+@TeleOp(name = "Mecanum Drive + Lift")
+public class MecanumTeleOp extends LinearOpMode {
+
+    // Yellow Jacket drive motors
+    DcMotor leftFront;
+    DcMotor rightFront;
+    DcMotor leftBack;
+    DcMotor rightBack;
+
+    // Torque servo on the lift
+    Servo lift;
+
+    static final double SPEED = 0.85;
+    static final double LIFT_DOWN = 0.15;
+    static final double LIFT_UP = 0.75;
+
+    @Override
+    public void runOpMode() {
+
+        leftFront = hardwareMap.get(DcMotor.class, "leftFront");
+        rightFront = hardwareMap.get(DcMotor.class, "rightFront");
+        leftBack = hardwareMap.get(DcMotor.class, "leftBack");
+        rightBack = hardwareMap.get(DcMotor.class, "rightBack");
+        lift = hardwareMap.get(Servo.class, "lift");
+
+        lift.setPosition(LIFT_DOWN);
+
+        waitForStart();
+
+        while (opModeIsActive()) {
+
+            double y = -gamepad1.left_stick_y;
+            double x = gamepad1.left_stick_x;
+            double turn = gamepad1.right_stick_x;
+
+            leftFront.setPower((y + x + turn) * SPEED);
+            leftBack.setPower((y - x + turn) * SPEED);
+            rightFront.setPower((y - x - turn) * SPEED);
+            rightBack.setPower((y + x - turn) * SPEED);
+
+            if (gamepad2.dpad_up) {
+                lift.setPosition(LIFT_UP);
+            }
+            if (gamepad2.dpad_down) {
+                lift.setPosition(LIFT_DOWN);
+            }
+
+            telemetry.addData("Left Front", leftFront.getPower());
+            telemetry.addData("Right Front", rightFront.getPower());
+            telemetry.addData("Lift", lift.getPosition());
+            telemetry.update();
+        }
+    }
+}`;
+
+/* Measured out of the user's fulll.step (AP242, metre units). */
+const SAMPLE_CAD = {
+  name:"fulll.step", units:"METRE", pointCount:127206,
+  bbox:{min:[-0.144,-0.115,-0.167], max:[0.270,0.375,0.238]},
+  parts:[
+    {name:"Arm",  part:"2000-0025-0002", n:1, kind:"servo"},
+    {name:"Base", part:"2000-0025-0002", n:1, kind:"servo"},
+    {name:"Claw", part:"2000-0025-0003", n:1, kind:"servo"},
+    {name:"Servo Mount", part:null, n:2, kind:"struct"},
+    {name:"1201-0043-0002 rev2", part:null, n:4, kind:"struct"},
+    {name:"1100-0010-0264 rev1", part:null, n:2, kind:"struct"},
+    {name:"1100-0009-0240 rev1", part:null, n:1, kind:"struct"},
+    {name:"1100-0008-0216 rev1", part:null, n:1, kind:"struct"},
+    {name:"1107-0011-0288 rev1", part:null, n:1, kind:"struct"},
+    {name:"1107-0005-0144 rev1", part:null, n:1, kind:"struct"},
+    {name:"1908-0025-0032 rev1", part:null, n:3, kind:"struct"},
+    {name:"Sonic Hub (8mm REX Bore)", part:null, n:1, kind:"struct"},
+    {name:"8mm REX flanged bearing", part:null, n:1, kind:"struct"},
+    {name:"2106-4008-0520 assembly", part:null, n:1, kind:"struct"},
+    {name:"2920-0001-4008 assembly", part:null, n:1, kind:"struct"},
+    {name:"1802-0043-0001", part:null, n:1, kind:"struct"}
+  ],
+  mechs:[
+    {id:"Arm",  part:"2000-0025-0002", partName:"2000 Series Servo", axis:[-0.72,0.70,0.00], pivot:[0.1323,0.2244,0.1958]},
+    {id:"Base", part:"2000-0025-0002", partName:"2000 Series Servo", axis:[0,0,1],           pivot:[0.1354,0.2310,-0.0522]},
+    {id:"Claw", part:"2000-0025-0003", partName:"2000 Series Servo", axis:[-0.47,-0.49,0.73],pivot:[0.0296,0.1461,0.0918]}
+  ]
+};
+
+function synthGeometry(){
+  const P=[]; const R=(a,b)=>a+Math.random()*(b-a);
+  const box=(c,s,n)=>{for(let i=0;i<n;i++){
+    const f=Math.floor(Math.random()*6), u=R(-.5,.5), v=R(-.5,.5);
+    const w=(f<2?0:f<4?1:2), sg=(f%2)?.5:-.5; const p=[0,0,0];
+    p[w]=sg; p[(w+1)%3]=u; p[(w+2)%3]=v;
+    P.push([c[0]+p[0]*s[0], c[1]+p[1]*s[1], c[2]+p[2]*s[2]]);}};
+  box([0.014,0.255,-0.026],[0.032,0.240,0.048],7000);
+  box([0.254,0.255,-0.026],[0.032,0.240,0.048],7000);
+  box([0.134,0.372,-0.026],[0.250,0.032,0.048],6000);
+  box([0.134,0.140,-0.026],[0.250,0.032,0.048],6000);
+  box([0.135,0.231,0.055],[0.042,0.042,0.210],8000);
+  box([0.135,0.231,-0.040],[0.056,0.056,0.050],3500);
+  box([0.132,0.224,0.196],[0.046,0.056,0.040],4500);
+  for(let i=0;i<10000;i++){ const t=Math.random();
+    P.push([0.132+(0.020-0.132)*t + R(-.010,.010), 0.224+(0.170-0.224)*t + R(-.010,.010),
+            0.196+(0.090-0.196)*t + R(-.008,.008)]); }
+  box([0.030,0.150,0.092],[0.040,0.048,0.036],4500);
+  box([0.016,0.181,0.084],[0.030,0.030,0.030],2400);
+  box([0.004,0.196,0.104],[0.014,0.056,0.012],2000);
+  box([0.030,0.200,0.112],[0.014,0.056,0.012],2000);
+  return P;
+}
+
+// ---- src/step.js ----
+/* ============================================================
+   2.  STEP PARSER
+   ============================================================ */
+
+/* Split the DATA section into entity records. A record ends at ';', but a
+   STEP string can legally contain ';' (a part called "Bracket; left"), and
+   any exporter may leave /* comments *\/ between records — splitting naively
+   on ';' silently drops or corrupts entities in both cases. This jumps
+   string-to-string with indexOf, so it stays fast on a 50 MB file. */
+function splitStepRecords(s){
+  const out=[]; const n=s.length;
+  let start=0, i=0, pending="";
+  // next ';', quote and comment, refreshed only once the cursor passes them —
+  // re-scanning from the cursor every step would be quadratic on a big file
+  let ns=s.indexOf(";"), nq=s.indexOf("'"), nc=s.indexOf("/*");
+  for(;;){
+    if(ns>=0&&ns<i) ns=s.indexOf(";",i);
+    if(ns<0) break;
+    if(nq>=0&&nq<i) nq=s.indexOf("'",i);
+    if(nc>=0&&nc<i) nc=s.indexOf("/*",i);
+    const q=nq<0?n:nq, c=nc<0?n:nc;
+    if(q<ns&&q<c){                               // skip a string, honouring '' escapes
+      let j=q+1;
+      for(;;){ const k=s.indexOf("'",j); if(k<0){ j=n; break; }
+        if(s.charCodeAt(k+1)===39){ j=k+2; continue; } j=k+1; break; }
+      i=j; continue;
+    }
+    if(c<ns){                                    // drop a comment, keep the text around it
+      pending+=s.slice(start,c);
+      const e=s.indexOf("*/",c+2); start=i=(e<0?n:e+2);
+      continue;
+    }
+    out.push((pending+s.slice(start,ns)).replace(/\r?\n/g," "));
+    pending=""; start=i=ns+1;
+  }
+  return out;
+}
+
+function parseSTEP(text, onProgress){
+  const di = text.indexOf("DATA;");
+  const body = (di<0? text : text.slice(di+5));
+  const recs = splitStepRecords(body);
+  onProgress && onProgress("records "+recs.length.toLocaleString());
+
+  const ents = new Map();
+  const pts  = [];
+  const reHead = /^\s*#(\d+)\s*=\s*(.*)$/;
+  const reSimple = /^([A-Z_0-9]+)\s*\(([\s\S]*)\)\s*$/;
+  const reCP = /^CARTESIAN_POINT\s*\(\s*'[^']*'\s*,\s*\(([^)]*)\)/;
+
+  for(let i=0;i<recs.length;i++){
+    const m = reHead.exec(recs[i]); if(!m) continue;
+    const id = +m[1]; const rest = m[2].trim();
+    const cp = reCP.exec(rest);
+    if(cp){
+      const a = cp[1].split(",");
+      if(a.length===3){ const x=+a[0],y=+a[1],z=+a[2];
+        if(x===x&&y===y&&z===z) pts.push(x,y,z); }
+    }
+    if(rest.charAt(0)==="("){
+      const parts=[]; const inner=rest.slice(1,-1);
+      const rt=/([A-Z_0-9]+)\s*\(/g; let mm;
+      while((mm=rt.exec(inner))){
+        let d=0,j=mm.index+mm[0].length-1; const s=j; let ins=false;
+        for(;j<inner.length;j++){ const c=inner[j];
+          if(ins){ if(c==="'") ins=false; continue; }
+          if(c==="'") ins=true; else if(c==="(") d++; else if(c===")"){ d--; if(!d) break; } }
+        parts.push([mm[1], inner.slice(s+1,j)]); rt.lastIndex=j;
+      }
+      if(parts.length) ents.set(id,parts);
+    }else{
+      const s = reSimple.exec(rest);
+      if(s) ents.set(id,[[s[1], s[2]]]);
+    }
+  }
+  onProgress && onProgress("entities "+ents.size.toLocaleString());
+
+  const A = s => { const out=[]; let d=0,cur="",ins=false;
+    for(let i=0;i<s.length;i++){ const c=s[i];
+      if(ins){ cur+=c; if(c==="'") ins=false; continue; }
+      if(c==="'"){ins=true;cur+=c;} else if(c==="("){d++;cur+=c;} else if(c===")"){d--;cur+=c;}
+      else if(c===","&&!d){out.push(cur.trim());cur="";} else cur+=c; }
+    if(cur.trim()) out.push(cur.trim()); return out; };
+  const S = x => { x=(x||"").trim();
+    return x.startsWith("'")? x.slice(1,-1).replace(/''/g,"'").replace(/\\X2\\[0-9A-F]{4}\\X0\\/g,"").replace(/\\X\\[0-9A-F]{2}/g,"") : x; };
+  const T = (id,want)=>{ const e=ents.get(id); if(!e) return null;
+    for(const pr of e) if(pr[0]===want) return pr[1]; return null; };
+  const REF = x => { x=(x||"").trim(); return x.startsWith("#")? +x.slice(1) : null; };
+
+  const products=new Map(), pdf=new Map(), pd=new Map();
+  for(const [id,e] of ents) for(const [t,a] of e){
+    if(t==="PRODUCT") products.set(id,S(A(a)[0]));
+    else if(t.indexOf("PRODUCT_DEFINITION_FORMATION")===0) pdf.set(id,REF(A(a)[2]));
+    else if(t==="PRODUCT_DEFINITION") pd.set(id,REF(A(a)[2]));
+  }
+  const pname = r => { const f=pd.get(r); return f==null?null:(products.get(pdf.get(f))||null); };
+  const clean = s => (s||"").replace(/\s*<\d+>\s*$/,"").trim();
+
+  const nauo=new Map(), kids=new Map(), asChild=new Set();
+  for(const [id,e] of ents) for(const [t,a] of e){
+    if(t==="NEXT_ASSEMBLY_USAGE_OCCURRENCE"){
+      const g=A(a), p=REF(g[3]), c=REF(g[4]);
+      if(p!=null&&c!=null){ nauo.set(id,[p,c]); if(!kids.has(p)) kids.set(p,[]); kids.get(p).push(c); asChild.add(c); }
+    }
+  }
+  const pdshape=new Map();
+  for(const [id,e] of ents) for(const [t,a] of e) if(t==="PRODUCT_DEFINITION_SHAPE") pdshape.set(id,REF(A(a)[2]));
+  const coords = ref => { const a=T(ref,"CARTESIAN_POINT")||T(ref,"DIRECTION"); if(!a) return null;
+    const g=A(a)[1]; if(!g||g[0]!=="(") return null;
+    return g.slice(1,-1).split(",").map(Number); };
+
+  let scale=1;
+  for(const [id,e] of ents){
+    const names=e.map(x=>x[0]);
+    if(names.indexOf("LENGTH_UNIT")>=0 && names.indexOf("SI_UNIT")>=0){
+      const a=e.filter(x=>x[0]==="SI_UNIT")[0][1];
+      scale = /MILLI/.test(a) ? 0.001 : 1;
+      break;
+    }
+  }
+
+  /* ===== assembly transforms =====
+     Part geometry is usually stored in the part's OWN coordinates and placed
+     by the assembly. Drawing the raw points piles most of the robot on the
+     origin, so walk the occurrence tree and compose the transforms. */
+  const nrm=v=>{const L=Math.hypot(v[0],v[1],v[2])||1;return [v[0]/L,v[1]/L,v[2]/L];};
+  const crs=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+  const dt3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+  const IDM={r:[[1,0,0],[0,1,0],[0,0,1]],t:[0,0,0]};
+  function matOf(id){
+    const a=T(id,"AXIS2_PLACEMENT_3D"); if(!a) return null;
+    const g=A(a);
+    const p=coords(REF(g[1]))||[0,0,0];
+    let z=(g[2]&&g[2][0]==="#")?coords(REF(g[2])):[0,0,1]; z=nrm(z||[0,0,1]);
+    let x=(g[3]&&g[3][0]==="#")?coords(REF(g[3])):null;
+    if(!x) x=Math.abs(z[0])<0.9?[1,0,0]:[0,1,0];
+    const dd=dt3(x,z); x=nrm([x[0]-dd*z[0],x[1]-dd*z[1],x[2]-dd*z[2]]);
+    return {r:[x,crs(z,x),z], t:p};
+  }
+  const applyM=(M,v)=>[
+    M.r[0][0]*v[0]+M.r[1][0]*v[1]+M.r[2][0]*v[2]+M.t[0],
+    M.r[0][1]*v[0]+M.r[1][1]*v[1]+M.r[2][1]*v[2]+M.t[1],
+    M.r[0][2]*v[0]+M.r[1][2]*v[1]+M.r[2][2]*v[2]+M.t[2]];
+  function mulM(Ma,Mb){
+    const r=[[0,0,0],[0,0,0],[0,0,0]];
+    for(let i=0;i<3;i++) for(let j=0;j<3;j++)
+      r[i][j]=Ma.r[0][j]*Mb.r[i][0]+Ma.r[1][j]*Mb.r[i][1]+Ma.r[2][j]*Mb.r[i][2];
+    return {r,t:applyM(Ma,Mb.t)};
+  }
+  function invM(M){
+    const r=[[M.r[0][0],M.r[1][0],M.r[2][0]],
+             [M.r[0][1],M.r[1][1],M.r[2][1]],
+             [M.r[0][2],M.r[1][2],M.r[2][2]]];
+    const t=applyM({r,t:[0,0,0]},M.t);
+    return {r,t:[-t[0],-t[1],-t[2]]};
+  }
+
+  /* The rep a SHAPE_DEFINITION_REPRESENTATION names often holds only an axis
+     placement; the real B-rep hangs off a plain SHAPE_REPRESENTATION_RELATIONSHIP.
+     Ones that also carry ...WITH_TRANSFORMATION are assembly links, not geometry. */
+  const geomLink=new Map();
+  for(const [id,e] of ents){
+    const names=e.map(x=>x[0]);
+    if(names.indexOf("SHAPE_REPRESENTATION_RELATIONSHIP")<0) continue;
+    if(names.indexOf("REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION")>=0) continue;
+    const a=T(id,"SHAPE_REPRESENTATION_RELATIONSHIP")||T(id,"REPRESENTATION_RELATIONSHIP");
+    if(!a) continue;
+    const g=A(a), r1=REF(g[2]), r2=REF(g[3]);
+    if(r1==null||r2==null) continue;
+    if(!geomLink.has(r1)) geomLink.set(r1,[]);
+    geomLink.get(r1).push(r2);
+    if(!geomLink.has(r2)) geomLink.set(r2,[]);
+    geomLink.get(r2).push(r1);
+  }
+  const repOfPd=new Map();
+  for(const [id,e] of ents) for(const [t,a] of e) if(t==="SHAPE_DEFINITION_REPRESENTATION"){
+    const g=A(a), owner=pdshape.get(REF(g[0]));
+    if(owner!=null) repOfPd.set(owner,REF(g[1]));
+  }
+  const refs=new Map();
+  const rePat=/#(\d+)/g;
+  for(const [id,e] of ents){
+    const s=[]; let mm;
+    for(const pr of e){ rePat.lastIndex=0; while((mm=rePat.exec(pr[1]))) s.push(+mm[1]); }
+    refs.set(id,s);
+  }
+  const blockCross=new Set();
+  for(const [id,e] of ents) for(const [t,a] of e)
+    if(t==="MAPPED_ITEM"||t==="REPRESENTATION_MAP"||t==="CONTEXT_DEPENDENT_SHAPE_REPRESENTATION") blockCross.add(id);
+  const ptCache=new Map();
+  function localPoints(rep){
+    if(ptCache.has(rep)) return ptCache.get(rep);
+    const seeds=[rep].concat(geomLink.get(rep)||[]);
+    const out=[]; const seen=new Set(seeds); const stack=seeds.slice();
+    while(stack.length){
+      const n=stack.pop();
+      const cp=T(n,"CARTESIAN_POINT");
+      if(cp){ const g=A(cp)[1];
+        if(g&&g[0]==="("){ const v=g.slice(1,-1).split(",").map(Number);
+          if(v.length===3&&v[0]===v[0]&&v[1]===v[1]&&v[2]===v[2]) out.push(v); } }
+      for(const r of refs.get(n)||[]){
+        if(seen.has(r)||blockCross.has(r)) continue;
+        seen.add(r); stack.push(r);
+      }
+    }
+    ptCache.set(rep,out); return out;
+  }
+
+  const xfOfNauo=new Map();
+  for(const [id,e] of ents){
+    const cd=T(id,"CONTEXT_DEPENDENT_SHAPE_REPRESENTATION"); if(!cd) continue;
+    const g=A(cd), rr=REF(g[0]), ps=REF(g[1]);
+    const rt=T(rr,"REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION"); if(!rt) continue;
+    const idt=REF(A(rt)[0]); const b=T(idt,"ITEM_DEFINED_TRANSFORMATION"); if(!b) continue;
+    /* The second placement of the pair is the occurrence's position; the first
+       is the source frame and is near-identity. Verified against both sample
+       assemblies — using the composed pair mirrors the model. */
+    const ga=A(b), m2=matOf(REF(ga[3]));
+    const nk=pdshape.get(ps);
+    if(nk==null||!m2) continue;
+    xfOfNauo.set(nk, m2);
+  }
+
+  const kidsOcc=new Map(), childSet=new Set();
+  for(const [id,pr] of nauo){
+    if(!kidsOcc.has(pr[0])) kidsOcc.set(pr[0],[]);
+    kidsOcc.get(pr[0]).push({nauo:id, pd:pr[1]});
+    childSet.add(pr[1]);
+  }
+  const treeRoots=[...kidsOcc.keys()].filter(k=>!childSet.has(k));
+
+  const occs=[];            // every placed occurrence, with its global transform
+  let totalPts=0;
+  function walkOcc(pdid,M,depth,viaNauo){
+    if(pdid==null||depth>12) return;
+    const rep=repOfPd.get(pdid);
+    if(rep!=null) totalPts+=localPoints(rep).length;
+    occs.push({pd:pdid, M, rep, nauo:viaNauo});
+    for(const k of (kidsOcc.get(pdid)||[]))
+      walkOcc(k.pd, mulM(M, xfOfNauo.get(k.nauo)||IDM), depth+1, k.nauo);
+  }
+  walkOcc(treeRoots.length?treeRoots[0]:null, IDM, 0, null);
+
+  /* Two conventions exist in the wild. Some exporters bake each part's world
+     position into its geometry; others store it locally and rely on the
+     assembly transform. Transforming an already-baked file smears it, so ask
+     the file directly: is a part's own centroid near ITS OWN origin (local),
+     or already near where the assembly puts it (global)? */
+  let sLocal=0, sGlobal=0, samples=0;
+  for(const o of occs){
+    if(o.rep==null||o.nauo==null) continue;
+    const lp=localPoints(o.rep);
+    if(lp.length<12) continue;
+    const c=[0,0,0];
+    for(const v of lp){ c[0]+=v[0]; c[1]+=v[1]; c[2]+=v[2]; }
+    c[0]/=lp.length; c[1]/=lp.length; c[2]/=lp.length;
+    // compare against this occurrence's OWN transform, not the accumulated one,
+    // which is already meaningless if the file turns out to be baked
+    const Td=xfOfNauo.get(o.nauo); if(!Td) continue;
+    const t=Td.t;
+    if(Math.hypot(t[0],t[1],t[2])<1e-6) continue;
+    sLocal  += Math.hypot(c[0],c[1],c[2]);
+    sGlobal += Math.hypot(c[0]-t[0],c[1]-t[1],c[2]-t[2]);
+    samples++;
+  }
+  const bakedGlobal = samples>4 && sGlobal < sLocal*0.75;
+  onProgress && onProgress(bakedGlobal?"geometry already placed":"applying assembly transforms");
+
+  // ---- emit the point cloud, strided to something a browser can draw
+  const TARGET=130000;
+  const raw=[];
+  if(bakedGlobal){
+    const st=Math.max(1,Math.ceil(pts.length/3/TARGET));
+    for(let i=0,n=0;i<pts.length;i+=3,n++){
+      if(n%st) continue;
+      raw.push([pts[i]*scale,pts[i+1]*scale,pts[i+2]*scale]);
+    }
+  }else{
+    const stride=Math.max(1,Math.ceil(totalPts/TARGET));
+    let seq=0;
+    for(const o of occs){
+      if(o.rep==null) continue;
+      const lp=localPoints(o.rep);
+      for(let i=0;i<lp.length;i++){
+        if((seq++ % stride)!==0) continue;
+        const v=applyM(o.M,lp[i]);
+        raw.push([v[0]*scale,v[1]*scale,v[2]*scale]);
+      }
+    }
+  }
+
+  // ---- occurrence placements
+  const placements=[];
+  if(bakedGlobal){
+    // positions are already world-space in the occurrence's own placement
+    for(const [id,e] of ents){
+      const cd=T(id,"CONTEXT_DEPENDENT_SHAPE_REPRESENTATION"); if(!cd) continue;
+      const g=A(cd), rr=REF(g[0]), ps=REF(g[1]);
+      const rt=T(rr,"REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION"); if(!rt) continue;
+      const idt=REF(A(rt)[0]); const b=T(idt,"ITEM_DEFINED_TRANSFORMATION"); if(!b) continue;
+      const a2=matOf(REF(A(b)[3])); if(!a2) continue;
+      const nk=pdshape.get(ps); if(nk==null||!nauo.has(nk)) continue;
+      const pr=nauo.get(nk);
+      placements.push({nauo:nk, parent:clean(pname(pr[0])), child:clean(pname(pr[1])),
+                       loc:[a2.t[0]*scale,a2.t[1]*scale,a2.t[2]*scale],
+                       axis:[a2.r[2][0],a2.r[2][1],a2.r[2][2]]});
+    }
+  }else{
+    for(const o of occs){
+      if(o.nauo==null||!nauo.has(o.nauo)) continue;
+      const pr=nauo.get(o.nauo);
+      placements.push({nauo:o.nauo, parent:clean(pname(pr[0])), child:clean(pname(pr[1])),
+                       loc:[o.M.t[0]*scale,o.M.t[1]*scale,o.M.t[2]*scale],
+                       axis:[o.M.r[2][0],o.M.r[2][1],o.M.r[2][2]]});
+    }
+  }
+
+  // ---- drop unbounded-surface construction points
+  const src = raw.length? raw : (function(){ const a=[];
+    for(let i=0;i<pts.length;i+=3) a.push([pts[i]*scale,pts[i+1]*scale,pts[i+2]*scale]); return a; })();
+  const q=(arr,p)=>{ const s=Float64Array.from(arr).sort(); return s[Math.min(s.length-1,Math.max(0,Math.floor(s.length*p)))]; };
+  const lim = k => { if(!src.length) return [-1,1];
+    const col=src.map(v=>v[k]); const a=q(col,0.01), b=q(col,0.99), pad=(b-a)*0.22+1e-9; return [a-pad,b+pad]; };
+  const L0=lim(0), L1=lim(1), L2=lim(2);
+  const P=[]; const mn=[1e18,1e18,1e18], mx=[-1e18,-1e18,-1e18];
+  for(const p of src){
+    if(p[0]<L0[0]||p[0]>L0[1]||p[1]<L1[0]||p[1]>L1[1]||p[2]<L2[0]||p[2]>L2[1]) continue;
+    P.push(p);
+    for(let k=0;k<3;k++){ if(p[k]<mn[k])mn[k]=p[k]; if(p[k]>mx[k])mx[k]=p[k]; }
+  }
+  if(!P.length){ mn[0]=mn[1]=mn[2]=-0.25; mx[0]=mx[1]=mx[2]=0.25; }
+
+  // ---- parts inventory
+  const counts=new Map(), partNo=new Map();
+  for(const [id,pr] of nauo){
+    const raw=pname(pr[1]); if(!raw) continue;
+    const n=clean(raw);
+    counts.set(n,(counts.get(n)||0)+1);
+    const pm=/(\d{4}-\d{4}-\d{1,4}|REV-\d{2}-\d{4})/.exec(raw);
+    if(pm) partNo.set(n,pm[1]);
+  }
+  const parts=[];
+  for(const [name,n] of counts){
+    const pn=partNo.get(name)||null;
+    const hw=hwFromPart(pn,name);
+    parts.push({name, part:pn, n, kind:hw?hw.kind:"struct"});
+  }
+
+  // ---- mechanisms
+  const roots=[...kids.keys()].filter(k=>asChild.has(k)===false);
+  const mechs=[];
+  const partOf = raw => { const m=/(\d{4}-\d{4}-\d{1,4}|REV-\d{2}-\d{4})/.exec(raw||""); return m?m[1]:null; };
+  const hwOf = c => { const raw=pname(c)||""; return hwFromPart(partOf(raw), clean(raw)); };
+  const isAct = h => !!h && (h.kind==="servo"||h.kind==="motor"||h.kind==="crservo");
+
+  /* A real export is usually wrapped: "Into The Deep" → "CURRENT Robot CAD"
+     → the actual parts. Walk down past levels that just hold one sub-assembly,
+     or nothing would be found but a single mechanism for the whole robot. */
+  let work=roots[0], guard=0;
+  while(work!=null && guard++<10){
+    const cs=kids.get(work)||[];
+    const subs=cs.filter(c=>kids.has(c));
+    // only a node whose ONLY child is a subassembly is a wrapper; a robot
+    // made of one subassembly plus one loose part is not
+    if(cs.length===1 && subs.length===1 && !isAct(hwOf(subs[0]))) work=subs[0]; else break;
+  }
+
+  /* Two different questions with two different answers. "Is this occurrence
+     itself an actuator?" is strict — "Servo Case" is not a servo. "Does this
+     subassembly contain one?" is loose — a part called "Servo Case" inside it
+     means a servo is modelled there, even with no part number anywhere. */
+  const scanFor=(node,depth,out)=>{
+    if(depth>6) return;
+    for(const c of (kids.get(node)||[])){
+      const nm=clean(pname(c)||"");
+      const hw=hwOf(c);
+      if(isAct(hw)&&!out.hw){ out.hw=hw; out.partName=nm; }
+      else if(!out.hint&&!/\b(hub|control|expansion|port|battery|camera|sensor)\b/i.test(nm)){
+        if(/\bservos?\b/i.test(nm)) out.hint=Object.assign({},GENERIC.Servo);
+        else if(/\b(motor|gearmotor)s?\b/i.test(nm)) out.hint=Object.assign({},GENERIC.Motor);
+      }
+      scanFor(c,depth+1,out);
+    }
+  };
+  const used={};
+  const uniqueId = nm => {
+    let id=nm||"mechanism";
+    if(used[id]==null){ used[id]=1; return id; }
+    used[id]++; return id+" #"+used[id];
+  };
+
+  /* One mechanism per occurrence, not per product name — a robot with four
+     identical drive motors has four distinct joints. */
+  for(const c of (kids.get(work)||[])){
+    const raw=pname(c)||"", nm=clean(raw);
+    const selfHw=hwOf(c);
+    const out={hw:selfHw||null, partName:selfHw?nm:null, hint:null};
+    if(!selfHw) scanFor(c,0,out);
+    if(!out.hw && out.hint && kids.has(c)){ out.hw=out.hint; out.partName=nm; }
+    /* Offer every subassembly, not only the ones holding a recognizable
+       actuator — otherwise a robot with a dozen devices gets two choices in
+       the hardware map. Ones with no actuator start as "fixed mount" so they
+       sit out of the chain until you give them a joint type. */
+    const isSub=kids.has(c);
+    if(!out.hw && !isSub) continue;
+    if(mechs.length>=40) break;
+
+    let pivot=null, axis=[0,0,1], cluster=[];
+    if(selfHw){
+      // the actuator itself: use this occurrence's own placement
+      const own=placements.filter(p=>p.child===nm && p.loc.some(v=>v!==0));
+      const mine=own.shift();
+      if(mine){ pivot=mine.loc.slice(); axis=mine.axis; cluster=[mine.loc.slice()]; }
+      // don't let a later occurrence of the same part reuse this placement
+      if(mine) mine.child="__used";
+    }else{
+      const own=placements.filter(p=>p.parent===nm && p.loc.some(v=>v!==0));
+      cluster=own.map(p=>p.loc.slice());
+      const mounts=own.filter(p=>/servo|mount|body|midcase|topcase|botcase|motor|bracket|gearbox/i.test(p.child||""));
+      const isVert=p=>Math.abs(p.axis[2])>0.85;
+      const tilted=mounts.filter(p=>!isVert(p));
+      let pick=null;
+      if(tilted.length)      pick=tilted.reduce((a,b)=>b.loc[2]>a.loc[2]?b:a);
+      else if(mounts.length) pick=mounts.reduce((a,b)=>b.loc[2]<a.loc[2]?b:a);
+      if(pick){ pivot=pick.loc.slice(); axis=pick.axis; }
+      else if(own.length){
+        const sm=[0,0,0]; own.forEach(p=>{sm[0]+=p.loc[0];sm[1]+=p.loc[1];sm[2]+=p.loc[2];});
+        pivot=sm.map(v=>v/own.length);
+      }
+      if(!pivot){
+        const self=placements.filter(p=>p.child===nm)[0];
+        if(self) pivot=self.loc.slice();
+      }
+    }
+    if(!pivot) continue;
+    mechs.push({id:uniqueId(nm.slice(0,44)), part:out.hw?(out.hw.part||null):null,
+                partName:out.partName||null, hasActuator:!!out.hw,
+                axis, pivot, kind:out.hw?null:"fixed", distalTo:null, cluster});
+  }
+  classifyMechs(mechs);
+
+  return {name:null, units:scale===1?"METRE":"MILLIMETRE", points:P, pointCount:P.length,
+          bbox:{min:mn,max:mx}, parts, mechs, placements};
+}
+
+/* ---- the rig: an explicit, editable kinematic chain ----
+   Everything below is a first guess. On anything more involved than a single
+   arm the guess will be wrong somewhere, so each field is editable in the
+   Kinematics panel and the whole model rebuilds from whatever is in there. */
+const JOINT_KINDS = {
+  "revolute-yaw" :{label:"turret yaw",  hint:"swings everything above it around a vertical axis"},
+  "revolute-lift":{label:"lift pivot",  hint:"raises and lowers what it carries — torque is checked here"},
+  "linear"       :{label:"linear slide",hint:"extends along its axis"},
+  "effector"     :{label:"end effector",hint:"grips or intakes; carries nothing further"},
+  "fixed"        :{label:"fixed mount", hint:"does not move the structure"}
+};
+const centroidOf = m => {
+  if(!m.cluster||!m.cluster.length) return m.pivot;
+  const s=[0,0,0]; for(const p of m.cluster){s[0]+=p[0];s[1]+=p[1];s[2]+=p[2];}
+  return s.map(v=>v/m.cluster.length);
+};
+
+function classifyMechs(mechs){
+  const vert = a => Math.abs(a[2])>0.85;
+  // only actuator-bearing mechanisms get a joint type inferred; the rest are
+  // offered as mapping targets but stay out of the chain until typed by hand
+  const act = mechs.filter(m=>m.kind!=="fixed");
+  let yaw=null, lowest=1e18;
+  for(const m of act){ if(m.pivot&&vert(m.axis)&&m.pivot[2]<lowest){lowest=m.pivot[2]; yaw=m;} }
+  if(yaw) yaw.kind="revolute-yaw";
+  let lift=null, high=-1e18;
+  for(const m of act){ if(m===yaw||!m.pivot) continue;
+    if(!vert(m.axis)&&m.pivot[2]>high){high=m.pivot[2]; lift=m;} }
+  if(lift) lift.kind="revolute-lift";
+  for(const m of act) if(!m.kind) m.kind="effector";
+
+  /* Default chain: chassis → yaw → lift, plus the one effector actually within
+     the lift's reach. Everything else mounts on the frame. On a robot with a
+     dozen mechanisms, hanging them all off the lift would be confidently wrong;
+     a flat default is honest and the Kinematics panel builds the real chain. */
+  let span=0;
+  for(const a of mechs) for(const b of mechs)
+    if(a.pivot&&b.pivot) span=Math.max(span,Math.hypot(a.pivot[0]-b.pivot[0],a.pivot[1]-b.pivot[1],a.pivot[2]-b.pivot[2]));
+  let nearEff=null, nd=1e18;
+  if(lift) for(const m of act){
+    if(m===lift||m===yaw||!m.pivot) continue;
+    const dd=Math.hypot(m.pivot[0]-lift.pivot[0],m.pivot[1]-lift.pivot[1],m.pivot[2]-lift.pivot[2]);
+    if(dd<nd){ nd=dd; nearEff=m; }
+  }
+  /* An arm's end effector sits closer to the elbow than the elbow does to the
+     shoulder. Anything further away is its own thing, mounted on the frame. */
+  const reach = (lift&&yaw)
+    ? Math.hypot(lift.pivot[0]-yaw.pivot[0],lift.pivot[1]-yaw.pivot[1],lift.pivot[2]-yaw.pivot[2])
+    : span*0.5;
+  if(nearEff && nd>reach) nearEff=null;
+  for(const m of mechs){
+    m.inferred=true;
+    m.dir=m.dir||1;
+    m.leverOverride = (m.leverOverride===undefined)?null:m.leverOverride;
+    if(m===yaw) m.parent="chassis";
+    else if(m===lift) m.parent=yaw?yaw.id:"chassis";
+    else if(m===nearEff) m.parent=lift.id;
+    else m.parent="chassis";
+  }
+  recomputeChain(mechs);
+}
+
+/* Re-derive everything that depends on the chain. Called after any edit. */
+function recomputeChain(mechs){
+  const byId={}; mechs.forEach(m=>byId[m.id]=m);
+  // guard against a parent loop the user might create
+  for(const m of mechs){
+    const seen={}; let p=m.parent, hops=0;
+    while(p&&p!=="chassis"&&byId[p]&&hops++<32){
+      if(seen[p]||p===m.id){ m.parent="chassis"; break; }
+      seen[p]=1; p=byId[p].parent;
+    }
+    if(m.parent!=="chassis"&&!byId[m.parent]) m.parent="chassis";
+  }
+  for(const m of mechs){
+    const kids=mechs.filter(k=>k.parent===m.id);
+    // a joint reaches to whatever it carries; a leaf reaches across its own parts
+    if(kids.length){
+      const s=[0,0,0];
+      kids.forEach(k=>{ s[0]+=k.pivot[0]; s[1]+=k.pivot[1]; s[2]+=k.pivot[2]; });
+      m.distalTo=s.map(v=>v/kids.length);
+    } else {
+      const c=centroidOf(m);
+      m.distalTo=(c===m.pivot)?null:c;
+    }
+    if(m.pivot&&m.distalTo){
+      const d=[0,1,2].map(i=>m.distalTo[i]-m.pivot[i]);
+      m.lever=Math.hypot(d[0],d[1],d[2]);
+      m.restAngleDeg=Math.atan2(d[2],Math.hypot(d[0],d[1]))*180/Math.PI;
+    } else { m.lever=0; m.restAngleDeg=0; }
+  }
+}
+const mlabel = m => m ? (m.label||m.id) : "—";
+const rigKids = (mechs,id) => mechs.filter(m=>m.parent===id);
+const rigRoots = mechs => mechs.filter(m=>m.parent==="chassis");
+function rigCarries(mechs,id){
+  const out=[]; const walk=i=>{ for(const k of rigKids(mechs,i)){ out.push(k.id); walk(k.id); } };
+  walk(id); return out;
+}
+const leverOf = m => (m && m.leverOverride!=null) ? m.leverOverride : (m?m.lever:0);
+
+function travelDegOf(spec){ return (spec&&spec.travelDeg)||300; }
+function armAngleDeg(mech,spec,pos,restPos){ return mech.restAngleDeg + (pos-restPos)*travelDegOf(spec); }
+function holdTorque(mech,angDeg,distalKg){
+  return distalKg*G*leverOf(mech)*Math.max(0.05,Math.abs(Math.cos(angDeg*Math.PI/180)));
+}
+function worstAngle(a0,a1){
+  const lo=Math.min(a0,a1), hi=Math.max(a0,a1);
+  if(lo<=0&&hi>=0) return 0;
+  return Math.abs(lo)<Math.abs(hi)?lo:hi;
+}
+
+// ---- src/expr.js ----
+/* ============================================================
+   3.  EXPRESSION LANGUAGE
+   One grammar covers arithmetic, comparisons and booleans, so a
+   condition like `gamepad2.right_bumper && !lastRightBumper`
+   evaluates by the same rules as `(y + x + turn) * SPEED`.
+   ============================================================ */
+/* Idioms that aren't worth teaching the grammar — collapse them to a name the
+   evaluator knows before tokenizing. */
+function normalizeExpr(src){
+  return String(src)
+    .replace(/\w+\s*\.\s*getRobotYawPitchRollAngles\s*\(\s*\)\s*\.\s*get(Yaw|Pitch|Roll)\s*\([^)]*\)/g,"__imu$1")
+    .replace(/\b[A-Za-z_$][\w$]*\s*\.\s*(RADIANS|DEGREES)\b/g,"0")
+    .replace(/(\d)[fFdDlL]\b/g,"$1");
+}
+function tokenize(src){
+  const T=[]; const re=/\s*(?:(gamepad\d\s*\.\s*[A-Za-z_]\w*)|([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)|(\d*\.\d+|\d+)|(&&|\|\||[<>=!]=|[-+*/%<>!(),?:]))/g;
+  let m, last=0;
+  while((m=re.exec(src))){
+    if(m.index!==last && src.slice(last,m.index).trim()) return null;   // unparseable
+    if(m[1]) T.push({t:"pad", v:m[1].replace(/\s+/g,"")});
+    else if(m[2]) T.push({t:"id", v:m[2].replace(/\s+/g,"")});
+    else if(m[3]) T.push({t:"num", v:parseFloat(m[3])});
+    else T.push({t:"op", v:m[4]});
+    last=re.lastIndex;
+  }
+  return src.slice(last).trim() ? null : T;
+}
+function parseExpr(src){
+  const T=tokenize(normalizeExpr(src)); if(!T||!T.length) return null;
+  let i=0;
+  const peek=()=>T[i], eat=v=>{ if(T[i]&&T[i].t==="op"&&T[i].v===v){i++;return true;} return false; };
+  function ternary(){
+    const c=or();
+    if(peek()&&peek().t==="op"&&peek().v==="?"){
+      i++; const a=ternary(); eat(":"); const b=ternary();
+      return {o:"?:",c,a,b};
+    }
+    return c;
+  }
+  function or(){ let n=and(); while(peek()&&peek().t==="op"&&peek().v==="||"){i++; n={o:"||",a:n,b:and()};} return n; }
+  function and(){ let n=cmp(); while(peek()&&peek().t==="op"&&peek().v==="&&"){i++; n={o:"&&",a:n,b:cmp()};} return n; }
+  function cmp(){ let n=add();
+    while(peek()&&peek().t==="op"&&["<",">","<=",">=","==","!="].indexOf(peek().v)>=0){
+      const o=peek().v; i++; n={o,a:n,b:add()}; } return n; }
+  function add(){ let n=mul();
+    while(peek()&&peek().t==="op"&&(peek().v==="+"||peek().v==="-")){ const o=peek().v; i++; n={o,a:n,b:mul()}; } return n; }
+  function mul(){ let n=un();
+    while(peek()&&peek().t==="op"&&["*","/","%"].indexOf(peek().v)>=0){ const o=peek().v; i++; n={o,a:n,b:un()}; } return n; }
+  function un(){
+    if(peek()&&peek().t==="op"&&(peek().v==="-"||peek().v==="!"||peek().v==="+")){
+      const o=peek().v; i++; return {o:"u"+o,a:un()}; }
+    return prim();
+  }
+  function prim(){
+    const t=peek();
+    if(!t) return {o:"num",v:0};
+    if(t.t==="num"){ i++; return {o:"num",v:t.v}; }
+    if(t.t==="pad"){ i++; return {o:"pad",v:t.v}; }
+    if(t.t==="id"){
+      i++;
+      if(peek()&&peek().t==="op"&&peek().v==="("){            // function call
+        i++; const args=[];
+        if(!(peek()&&peek().t==="op"&&peek().v===")")){
+          args.push(ternary());
+          while(peek()&&peek().t==="op"&&peek().v===","){ i++; args.push(ternary()); }
+        }
+        eat(")");
+        return {o:"call",name:t.v,args};
+      }
+      if(/^(true|false)$/.test(t.v)) return {o:"num",v:t.v==="true"?1:0};
+      return {o:"id",v:t.v};
+    }
+    if(t.t==="op"&&t.v==="("){ i++; const n=ternary(); eat(")"); return n; }
+    i++; return {o:"num",v:0};
+  }
+  const node=ternary();
+  return node;                          // trailing junk tolerated
+}
+function evalNode(n, env){
+  if(!n) return 0;
+  switch(n.o){
+    case "num": return n.v;
+    case "id":  return env.get(n.v);
+    case "pad": return env.pad(n.v);
+    case "u-": return -evalNode(n.a,env);
+    case "u+": return  evalNode(n.a,env);
+    case "u!": return  evalNode(n.a,env)?0:1;
+    case "?:": return evalNode(n.c,env)? evalNode(n.a,env) : evalNode(n.b,env);
+    case "&&": return (evalNode(n.a,env)&&evalNode(n.b,env))?1:0;
+    case "||": return (evalNode(n.a,env)||evalNode(n.b,env))?1:0;
+    case "<":  return evalNode(n.a,env)< evalNode(n.b,env)?1:0;
+    case ">":  return evalNode(n.a,env)> evalNode(n.b,env)?1:0;
+    case "<=": return evalNode(n.a,env)<=evalNode(n.b,env)?1:0;
+    case ">=": return evalNode(n.a,env)>=evalNode(n.b,env)?1:0;
+    case "==": return evalNode(n.a,env)===evalNode(n.b,env)?1:0;
+    case "!=": return evalNode(n.a,env)!==evalNode(n.b,env)?1:0;
+    case "+":  return evalNode(n.a,env)+evalNode(n.b,env);
+    case "-":  return evalNode(n.a,env)-evalNode(n.b,env);
+    case "*":  return evalNode(n.a,env)*evalNode(n.b,env);
+    case "/":  { const d=evalNode(n.b,env); return d?evalNode(n.a,env)/d:0; }
+    case "%":  { const d=evalNode(n.b,env); return d?evalNode(n.a,env)%d:0; }
+    case "call":{
+      const a=n.args.map(x=>evalNode(x,env));
+      // device readback: motor.getCurrentPosition(), servo.getPosition(), …
+      const dm=/^([A-Za-z_$][\w$]*)\.(getCurrentPosition|getPosition|getPower|getVelocity|getTargetPosition)$/.exec(n.name);
+      if(dm) return env.device(dm[1],dm[2]);
+      // ftclib / roadrunner PID objects
+      const pm=/^([A-Za-z_$][\w$]*)\.(calculate|setPID|setP|setI|setD|reset)$/.exec(n.name);
+      if(pm) return env.pid(pm[1],pm[2],a);
+      switch(n.name){
+        case "Math.abs": return Math.abs(a[0]);
+        case "Math.max": return Math.max.apply(null,a);
+        case "Math.min": return Math.min.apply(null,a);
+        case "Math.hypot": return Math.hypot.apply(null,a);
+        case "Math.sqrt": return Math.sqrt(Math.max(0,a[0]));
+        case "Math.cbrt": return Math.cbrt(a[0]);
+        case "Math.pow": return Math.pow(a[0],a[1]);
+        case "Math.signum": return Math.sign(a[0]);
+        case "Math.sin": return Math.sin(a[0]);
+        case "Math.cos": return Math.cos(a[0]);
+        case "Math.tan": return Math.tan(a[0]);
+        case "Math.asin": return Math.asin(Math.max(-1,Math.min(1,a[0])));
+        case "Math.acos": return Math.acos(Math.max(-1,Math.min(1,a[0])));
+        case "Math.atan": return Math.atan(a[0]);
+        case "Math.atan2": return Math.atan2(a[0],a[1]);
+        case "Math.exp": return Math.exp(a[0]);
+        case "Math.log": return a[0]>0?Math.log(a[0]):0;
+        case "Math.floor": return Math.floor(a[0]);
+        case "Math.ceil": return Math.ceil(a[0]);
+        case "Math.round": return Math.round(a[0]);
+        case "Math.toRadians": return a[0]*Math.PI/180;
+        case "Math.toDegrees": return a[0]*180/Math.PI;
+        case "Range.clip": return Math.max(a[1],Math.min(a[2],a[0]));
+        default: return a.length?a[0]:0;
+      }
+    }
+  }
+  return 0;
+}
+/* every gamepad reference an expression touches, for the binding list */
+const PADREF=/^gamepad(\d)\.(\w+)$/;
+function splitPadRef(r){ const m=PADREF.exec(r); return m?{pad:+m[1],btn:m[2]}:null; }
+function padRefs(n, out){
+  out=out||[];
+  if(!n||typeof n!=="object") return out;
+  if(n.o==="pad") out.push(n.v);
+  ["a","b"].forEach(k=>{ if(n[k]) padRefs(n[k],out); });
+  if(n.args) n.args.forEach(x=>padRefs(x,out));
+  return out;
+}
+
+// ---- src/java.js ----
+/* ============================================================
+   4.  JAVA OPMODE PARSER  →  statement tree
+   ============================================================ */
+const DEVT="ServoImplEx|CRServo|Servo|DcMotorEx|DcMotor|AnalogInput|DigitalChannel|ColorSensor|DistanceSensor|TouchSensor|IMU|BNO055IMU";
+
+function matchBlock(src,from){
+  let d=0;
+  for(let i=from;i<src.length;i++){
+    const c=src[i];
+    if(c==="{") d++;
+    else if(c==="}"){ d--; if(!d) return [from+1,i]; }
+  }
+  return [from+1,src.length];
+}
+function stripComments(s){
+  return s.replace(/\/\*[\s\S]*?\*\//g,m=>m.replace(/[^\n]/g," "))
+          .replace(/\/\/[^\n]*/g,m=>" ".repeat(m.length));
+}
+
+/* Split a block into an ordered statement list, recursing into if/else. */
+function parseStatements(src){
+  const out=[]; let i=0;
+  while(i<src.length){
+    while(i<src.length && /\s/.test(src[i])) i++;
+    if(i>=src.length) break;
+    if(src[i]==="{"){ const r=matchBlock(src,i); out.push.apply(out,parseStatements(src.slice(r[0],r[1]))); i=r[1]+1; continue; }
+    const kw=/^(if|while|for|switch)\b/.exec(src.slice(i));
+    if(kw){
+      const lp=src.indexOf("(",i);
+      if(lp<0){ break; }
+      let d=0,j=lp;
+      for(;j<src.length;j++){ if(src[j]==="(")d++; else if(src[j]===")"){d--; if(!d)break;} }
+      const cond=src.slice(lp+1,j);
+      let k=j+1; while(k<src.length&&/\s/.test(src[k]))k++;
+      let bodySrc,end;
+      if(src[k]==="{"){ const r=matchBlock(src,k); bodySrc=src.slice(r[0],r[1]); end=r[1]+1; }
+      else { const sc=src.indexOf(";",k); if(sc<0) break; bodySrc=src.slice(k,sc+1); end=sc+1; }
+      if(kw[1]!=="if"){ i=end; continue; }                        // loops/switch: skip body
+      let elseStmts=null, m2=end;
+      while(m2<src.length&&/\s/.test(src[m2]))m2++;
+      if(/^else\b/.test(src.slice(m2))){
+        let k2=m2+4; while(k2<src.length&&/\s/.test(src[k2]))k2++;
+        if(src[k2]==="{"){ const r=matchBlock(src,k2); elseStmts=parseStatements(src.slice(r[0],r[1])); end=r[1]+1; }
+        else { // else if … / single statement
+          const rest=src.slice(k2);
+          const stop=/^if\b/.test(rest)? findStatementEnd(rest) : rest.indexOf(";")+1;
+          elseStmts=parseStatements(rest.slice(0,stop)); end=k2+stop;
+        }
+      }
+      out.push({kind:"if", cond, condAst:parseExpr(cond), then:parseStatements(bodySrc), else:elseStmts});
+      i=end; continue;
+    }
+    const sc=src.indexOf(";",i);
+    if(sc<0) break;
+    const st=classifyStatement(src.slice(i,sc).trim());
+    if(st) out.push(st);
+    i=sc+1;
+  }
+  return out;
+}
+function findStatementEnd(rest){
+  const lp=rest.indexOf("(");
+  let d=0,j=lp;
+  for(;j<rest.length;j++){ if(rest[j]==="(")d++; else if(rest[j]===")"){d--; if(!d)break;} }
+  let k=j+1; while(k<rest.length&&/\s/.test(rest[k]))k++;
+  if(rest[k]==="{"){ const r=matchBlock(rest,k); return r[1]+1; }
+  return rest.indexOf(";",k)+1;
+}
+function splitArgsTop(s){
+  const out=[]; let d=0,cur="",ins=false;
+  for(let i=0;i<s.length;i++){ const c=s[i];
+    if(ins){ cur+=c; if(c==='"') ins=false; continue; }
+    if(c==='"'){ins=true;cur+=c;}
+    else if(c==="("){d++;cur+=c;} else if(c===")"){d--;cur+=c;}
+    else if(c===","&&!d){out.push(cur.trim());cur="";} else cur+=c; }
+  if(cur.trim()) out.push(cur.trim());
+  return out;
+}
+function classifyStatement(s){
+  if(!s) return null;
+  let m;
+  if((m=/^([A-Za-z_$][\w$]*)\s*\.\s*(setPosition|setPower|setVelocity)\s*\(([\s\S]*)\)$/.exec(s)))
+    return {kind:"call", dev:m[1], op:m[2], expr:m[3].trim(), ast:parseExpr(m[3])};
+  if(/^telemetry\s*\./.test(s)) return null;
+  // a blocking wait inside the loop — the bench flags it and skips it
+  if((m=/^sleep\s*\(\s*(\d+)\s*\)$/.exec(s))) return {kind:"sleep", ms:+m[1]};
+  // controller = new PIDController(p, i, d)
+  if((m=/^([A-Za-z_$][\w$]*)\s*=\s*new\s+\w*PID\w*\s*\(([\s\S]*)\)$/.exec(s)))
+    return {kind:"pidnew", obj:m[1], args:splitArgsTop(m[2]).map(x=>parseExpr(x))};
+  // any other method on an object: setDirection, setMode, setPID, resetYaw …
+  if((m=/^([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)$/.exec(s))){
+    const raw=m[3];
+    return {kind:"objcall", obj:m[1], meth:m[2], raw,
+            args:splitArgsTop(raw).map(x=>parseExpr(x))};
+  }
+  if((m=/^(?:(?:final|static)\s+)*(?:double|float|int|long|boolean)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(s)))
+    return {kind:"assign", name:m[1], expr:m[2].trim(), ast:parseExpr(m[2])};
+  if((m=/^([A-Za-z_$][\w$]*)\s*([+\-*/]?)=\s*([\s\S]+)$/.exec(s))){
+    if(m[3].charAt(0)==="=") return null;          // that was `==`, not an assignment
+    return {kind:"assign", name:m[1], op:m[2], expr:m[3].trim(), ast:parseExpr(m[3])};
+  }
+  return null;
+}
+
+function parseJava(raw){
+  const src = stripComments(raw);
+  const out = {opmode:null, kind:null, cls:null, devices:[], consts:{}, vars:{},
+               stmts:[], inits:[], telemetry:[], hasLoop:false, hasWait:false, parseNotes:[]};
+  let m;
+  if((m=/@TeleOp\s*\(([^)]*)\)/.exec(src))){ out.kind="TeleOp";
+    const n=/name\s*=\s*"([^"]*)"/.exec(m[1]); out.opmode=n?n[1]:"(unnamed)"; }
+  else if((m=/@Autonomous\s*\(([^)]*)\)/.exec(src))){ out.kind="Autonomous";
+    const n=/name\s*=\s*"([^"]*)"/.exec(m[1]); out.opmode=n?n[1]:"(unnamed)"; }
+  else if(/@TeleOp\b/.test(src)){ out.kind="TeleOp"; out.opmode="(unnamed)"; }
+  if((m=/class\s+(\w+)\s+extends\s+(\w+)/.exec(src))){ out.cls=m[1]; out.base=m[2]; }
+  out.hasWait=/waitForStart\s*\(\s*\)/.test(src);
+  out.hasLoop=/opModeIsActive\s*\(\s*\)/.test(src);
+
+  // ---- device declarations, carrying the comment written just above them
+  const reDecl=new RegExp("\\b(?:(?:public|private|protected|static|final)\\s+)*("+DEVT+")\\s+([A-Za-z_$][\\w$]*)\\s*(?:=[^;]*)?;","g");
+  const rawLines=raw.split(/\r?\n/);
+  while((m=reDecl.exec(src))){
+    const type=m[1], name=m[2];
+    const upto=src.slice(0,m.index).split(/\r?\n/).length-1;
+    const lines=[];
+    for(let L=upto; L>=0 && L>upto-5; L--){
+      const t=(rawLines[L]||"").trim();
+      if(/^\/\//.test(t)){ const c=t.replace(/^\/+\s*/,"").trim();
+        if(c && !/^=+$/.test(c)) lines.unshift(c); }
+      else if(t==="" || new RegExp("\\b"+type+"\\s+"+name).test(t)) { if(lines.length && t==="") break; }
+      else break;
+    }
+    const intent=lines.join(" ");
+    out.devices.push({name,type,cfg:null,intent,
+      declaredRole:/torque/i.test(intent)?"Torque":(/speed/i.test(intent)?"Speed":null)});
+  }
+  const reHM1=/([A-Za-z_$][\w$]*)\s*=\s*hardwareMap\s*\.\s*(\w+)\s*\.\s*get\s*\(\s*"([^"]+)"\s*\)/g;
+  const reHM2=/([A-Za-z_$][\w$]*)\s*=\s*hardwareMap\s*\.\s*get\s*\(\s*(\w+)\s*\.\s*class\s*,\s*"([^"]+)"\s*\)/g;
+  const bind=(v,cfg,t)=>{ const d=out.devices.filter(d=>d.name===v)[0];
+    if(d){ d.cfg=cfg; if(d.type==="?"&&t) d.type=t; }
+    else out.devices.push({name:v,type:t||"?",cfg,intent:"",declaredRole:null}); };
+  while((m=reHM1.exec(src))) bind(m[1],m[3],null);
+  while((m=reHM2.exec(src))) bind(m[1],m[3],m[2]);
+
+  // ---- fields
+  const reC=/\b((?:(?:public|private|protected|static|final)\s+)*)(double|float|int|long)\s+([A-Za-z_$][\w$]*)\s*=\s*(-?\d*\.?\d+)\s*;/g;
+  while((m=reC.exec(src))){
+    const v=parseFloat(m[4]), name=m[3];
+    if(/\bfinal\b/.test(m[1])) out.consts[name]=v; else out.vars[name]=v;
+  }
+  const reB=/\b((?:(?:public|private|protected|static|final)\s+)*)boolean\s+([A-Za-z_$][\w$]*)\s*=\s*(true|false)\s*;/g;
+  while((m=reB.exec(src))) out.vars[m[2]] = m[3]==="true"?1:0;
+  // several names on one line: `double p = 0.0036, i = 0.03, d = 0.000525;`
+  const reMulti=/\b((?:(?:public|private|protected|static|final)\s+)*)(double|float|int|long)\s+([^;=(){}]*=[^;{}]*);/g;
+  while((m=reMulti.exec(src))){
+    const isFinal=/\bfinal\b/.test(m[1]);
+    for(const part of m[3].split(",")){
+      const q=/^\s*([A-Za-z_$][\w$]*)\s*=\s*(-?\d*\.?\d+)\s*$/.exec(part);
+      if(!q) continue;
+      if(isFinal){ if(out.consts[q[1]]===undefined) out.consts[q[1]]=parseFloat(q[2]); }
+      else if(out.vars[q[1]]===undefined) out.vars[q[1]]=parseFloat(q[2]);
+    }
+  }
+  // `public static int target1;` — no initializer, but it exists and reads 0
+  const reU=/\b((?:(?:public|private|protected|static)\s+)+)(double|float|int|long)\s+([A-Za-z_$][\w$]*)\s*;/g;
+  while((m=reU.exec(src)))
+    if(out.vars[m[3]]===undefined&&out.consts[m[3]]===undefined) out.vars[m[3]]=0;
+  // an initializer that is an expression, e.g. `1425.1/360.0`
+  const constEnv={ get:k=>out.consts[k]!==undefined?out.consts[k]:(out.vars[k]||0),
+                   pad:()=>0, device:()=>0, pid:()=>0 };
+  const reX=/\b((?:(?:public|private|protected|static|final)\s+)*)(double|float|int|long)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;{}()]*[\d.][^;{}]*);/g;
+  while((m=reX.exec(src))){
+    const name=m[3];
+    if(out.consts[name]!==undefined||out.vars[name]!==undefined) continue;
+    const ast=parseExpr(m[4]);
+    if(!ast) continue;
+    const v=evalNode(ast,constEnv);
+    if(typeof v==="number"&&isFinite(v)){
+      if(/\bfinal\b/.test(m[1])) out.consts[name]=v; else out.vars[name]=v;
+    }
+  }
+
+  // ---- init commands, before waitForStart
+  const wf=src.search(/waitForStart\s*\(/);
+  // keep every init statement, so setDirection and `new PIDController` run too
+  if(wf>0) out.inits=parseStatements(src.slice(0,wf));
+
+  // ---- the loop
+  const lm=/while\s*\(\s*opModeIsActive\s*\(\s*\)\s*\)\s*\{/.exec(src);
+  let loop="";
+  if(lm){ const r=matchBlock(src,lm.index+lm[0].length-1); loop=src.slice(r[0],r[1]); }
+  else {                                       // iterative OpMode: use loop()
+    const im=/public\s+void\s+loop\s*\(\s*\)\s*\{/.exec(src);
+    if(im){ const r=matchBlock(src,im.index+im[0].length-1); loop=src.slice(r[0],r[1]); out.hasLoop=true; }
+  }
+  out.loopSrc=loop;
+  out.stmts=parseStatements(loop);
+
+  const reT=/telemetry\s*\.\s*(addData|addLine)\s*\(\s*("([^"]*)")?\s*(?:,\s*([\s\S]*?))?\)\s*;/g;
+  while((m=reT.exec(loop))) out.telemetry.push({kind:m[1],label:m[3]||"",expr:(m[4]||"").trim()});
+
+  out.bindings = deriveBindings(out.stmts);
+  return out;
+}
+
+function idRefs(n, out){
+  out=out||[];
+  if(!n||typeof n!=="object") return out;
+  if(n.o==="id") out.push(n.v);
+  if(n.a) idRefs(n.a,out);
+  if(n.b) idRefs(n.b,out);
+  if(n.args) n.args.forEach(x=>idRefs(x,out));
+  return out;
+}
+/* Static read of the statement tree: which control drives what. Drivetrain
+   code rarely names a stick inside setPower — it goes through locals like
+   `double y = -gamepad1.left_stick_y`, so trace those back to their axes. */
+function deriveBindings(stmts){
+  const varAxes={};
+  const seed=list=>{ for(const st of list){
+    if(st.kind==="if"){ seed(st.then); if(st.else) seed(st.else); }
+    else if(st.kind==="assign"){
+      const ax=padRefs(st.ast).slice();
+      idRefs(st.ast).forEach(id=>{ if(varAxes[id]) ax.push.apply(ax,varAxes[id]); });
+      // `y *= powerFactor` refines y, it doesn't replace where y came from
+      varAxes[st.name] = (st.op && varAxes[st.name]) ? varAxes[st.name].concat(ax) : ax;
+    }
+  }};
+  seed(stmts);
+  const axesOf=ast=>{
+    const ax=padRefs(ast).slice();
+    idRefs(ast).forEach(id=>{ if(varAxes[id]) ax.push.apply(ax,varAxes[id]); });
+    return ax.filter((v,i,a)=>a.indexOf(v)===i);
+  };
+  const B=[];
+  const walk=(list,ctx)=>{
+    for(const st of list){
+      if(st.kind==="if"){
+        const refs=padRefs(st.condAst).map(splitPadRef).filter(Boolean);
+        const next = refs.length? {pad:refs[0].pad, btn:refs[0].btn, cond:st.cond} : ctx;
+        walk(st.then, next);
+        if(st.else) walk(st.else, next);
+      }else if(st.kind==="call"){
+        const axes=axesOf(st.ast);
+        if(ctx) B.push({pad:ctx.pad, btn:ctx.btn, cond:ctx.cond, dev:st.dev, op:st.op, expr:st.expr, axes});
+        else if(axes.length){
+          const a=splitPadRef(axes[0]);
+          if(a) B.push({pad:a.pad, btn:a.btn, cond:null, dev:st.dev, op:st.op, expr:st.expr, axes, analog:true});
+        }
+      }else if(st.kind==="assign" && ctx){
+        // a button that sets a PID target is a binding too, even though it
+        // never touches a device directly
+        B.push({pad:ctx.pad, btn:ctx.btn, cond:ctx.cond, dev:st.name,
+                op:(st.op||"")+"=", expr:st.expr, axes:[], assign:true});
+      }
+    }
+  };
+  walk(stmts,null);
+  return B;
+}
+/* Does anything in the loop actually move this device? */
+function isCommanded(code,name){
+  let found=false;
+  const scan=list=>{ for(const st of list){
+    if(st.kind==="if"){ scan(st.then); if(st.else) scan(st.else); }
+    else if(st.kind==="call"&&st.dev===name) found=true; } };
+  scan(code.stmts);
+  return found || code.inits.some(i=>i.dev===name);
+}
+
+/* Positions a device is commanded to, for gauge ranges and travel checks. */
+function travelRange(code,devName){
+  const vals=[]; const seenVar={};
+  const scan=(list)=>{ for(const st of list){
+    if(st.kind==="if"){ scan(st.then); if(st.else) scan(st.else); }
+    else if(st.kind==="call" && st.dev===devName && st.op==="setPosition"){
+      const v=staticValue(st.ast,code);
+      if(v!==null) vals.push(v);
+      else if(st.ast && st.ast.o==="id") seenVar[st.ast.v]=1;
+    }
+  }};
+  scan(code.stmts);
+  for(const i of code.inits) if(i.dev===devName&&i.op==="setPosition"){
+    const v=staticValue(i.ast,code); if(v!==null) vals.push(v);
+  }
+  // a servo fed from a variable sweeps wherever that variable is clamped
+  for(const vn in seenVar){
+    const b=varBounds(code,vn);
+    if(b){ vals.push(b.lo,b.hi); } else if(code.vars[vn]!==undefined) vals.push(code.vars[vn]);
+  }
+  if(!vals.length) return null;
+  return {lo:Math.min.apply(null,vals), hi:Math.max.apply(null,vals), n:vals.length};
+}
+function staticValue(ast,code){
+  if(!ast) return null;
+  if(ast.o==="num") return ast.v;
+  if(ast.o==="id"){
+    if(code.consts[ast.v]!==undefined) return code.consts[ast.v];
+    return null;
+  }
+  return null;
+}
+/* clamps written as `if (v > MAX) v = MAX;` bound the variable's sweep */
+function varBounds(code,name){
+  const lows=[], highs=[];
+  const scan=(list)=>{ for(const st of list){
+    if(st.kind==="if"){
+      const c=st.condAst;
+      if(c&&(c.o===">"||c.o==="<"||c.o===">="||c.o==="<=")&&c.a&&c.a.o==="id"&&c.a.v===name){
+        const bound=staticValue(c.b,code);
+        if(bound!==null){ (c.o.charAt(0)===">"?highs:lows).push(bound); }
+      }
+      scan(st.then); if(st.else) scan(st.else);
+    }
+  }};
+  scan(code.stmts);
+  if(!lows.length&&!highs.length) return null;
+  return {lo: lows.length?Math.max.apply(null,lows):0,
+          hi: highs.length?Math.min.apply(null,highs):1};
+}
+
+// ---- src/mapping.js ----
+/* ============================================================
+   5.  MAPPING
+   ============================================================ */
+const SYNONYM={ lift:["arm","lift","shoulder","elbow","slide","extend","pivot"],
+                grip:["claw","grip","gripper","hand","intake","clamp","wrist"],
+                yaw: ["rotate","base","turret","yaw","swivel","spin"],
+                drive:["drive","left","right","front","back","rear","wheel","motor"] };
+function autoMap(devices,mechs){
+  const map={}; const used={};
+  const score=(dev,mech)=>{
+    const d=dev.name.toLowerCase(), s=(mech.id||"").toLowerCase();
+    if(!s) return 0;
+    if(d===s) return 100;
+    if(s.indexOf(d)>=0||d.indexOf(s)>=0) return 70;
+    for(const key in SYNONYM){
+      const g=SYNONYM[key];
+      if(g.some(w=>d.indexOf(w)>=0)&&g.some(w=>s.indexOf(w)>=0)) return 55;
+    }
+    if(mech.kind==="effector"&&SYNONYM.grip.some(w=>d.indexOf(w)>=0)) return 45;
+    if(mech.kind==="revolute-lift"&&SYNONYM.lift.some(w=>d.indexOf(w)>=0)) return 45;
+    if(mech.kind==="revolute-yaw"&&SYNONYM.yaw.some(w=>d.indexOf(w)>=0)) return 45;
+    return 0;
+  };
+  for(const dev of devices){
+    let best=null,bv=0;
+    for(const mech of mechs){ if(used[mech.id]) continue;
+      const v=score(dev,mech); if(v>bv){bv=v;best=mech;} }
+    if(best&&bv>=45){ map[dev.name]=best.id; used[best.id]=1; } else map[dev.name]=null;
+  }
+  return map;
+}
+/* Which corner a drive motor sits on, from its name. Teams write this every
+   possible way — frontLeft, leftFront, left_front, motorFL, fl, lf, rearRight,
+   rr — so split the name into words first, then read each word, including the
+   two-letter corner codes. */
+function wheelCorner(name){
+  const words=String(name)
+    .replace(/([a-z0-9])([A-Z])/g,"$1 $2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g,"$1 $2")
+    .toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  const c={left:false,right:false,front:false,back:false};
+  for(const w of words){
+    if(w==="left"||w==="l") c.left=true;
+    else if(w==="right") c.right=true;
+    else if(w==="front"||w==="f") c.front=true;
+    else if(w==="back"||w==="rear"||w==="b") c.back=true;
+    else if(w.length===2){
+      const a=w[0], b=w[1];
+      if(a==="l"||b==="l") c.left=true;
+      if(b==="r"&&"fbr".indexOf(a)>=0) c.right=true;        // fr br rr
+      if(a==="r"&&"fb".indexOf(b)>=0) c.right=true;         // rf rb
+      if(a==="f"||b==="f") c.front=true;
+      if(a==="b"||b==="b") c.back=true;
+      if(a==="r"&&(b==="l"||b==="r")) c.back=true;          // rl rr = rear
+    }
+  }
+  return c;
+}
+/* Drive motors: those whose power comes straight off a stick. */
+function detectDrivetrain(code){
+  const motors=code.devices.filter(d=>/DcMotor/i.test(d.type||""));
+  if(motors.length<2) return null;
+  const analog={};
+  for(const b of (code.bindings||[])) if(b.analog) analog[b.dev]=1;
+  const wheels=[];
+  for(const mo of motors){
+    if(!analog[mo.name]) continue;      // PID-driven arms are not part of the drive base
+    let expr=null;
+    const scan=list=>{ for(const st of list){
+      if(st.kind==="if"){ scan(st.then); if(st.else) scan(st.else); }
+      else if(st.kind==="call"&&st.dev===mo.name&&(st.op==="setPower"||st.op==="setVelocity")) expr=st;
+    }};
+    scan(code.stmts);
+    if(!expr) continue;
+    wheels.push(Object.assign({dev:mo.name, stmt:expr}, wheelCorner(mo.name)));
+  }
+  if(wheels.length<2) return null;
+  const hasSide=wheels.some(w=>w.left)&&wheels.some(w=>w.right);
+  return {wheels, style: wheels.length>=4?"mecanum":"tank", ok:hasSide};
+}
+
+// ---- src/analyze.js ----
+/* ============================================================
+   6.  ANALYSIS
+   ============================================================ */
+function analyze(code,cad,map,opts){
+  const F=[];
+  const add=(key,sev,title,body,math,fix)=>F.push({key,sev,title,body,math,fix});
+  const mechOf = n => cad.mechs.filter(m=>m.id===map[n])[0] || null;
+  const payload=opts.payloadKg, duty=opts.duty, trust=opts.trust;
+  const SERVO_MASS=0.060, LINK_MASS=0.055;
+
+  if(!code.kind) add("struct:anno","warn","No OpMode annotation",
+    "Nothing marked <code>@TeleOp</code> or <code>@Autonomous</code>, so this class won't appear on the Driver Station list.",null,
+    "Add <code>@TeleOp(name = \"…\")</code> above the class.");
+  if(!code.hasLoop) add("struct:loop","fail","No OpMode loop found",
+    "The bench couldn't find a <code>while (opModeIsActive())</code> block or a <code>loop()</code> method, so there is nothing to run.",null,
+    "Check the class structure — everything below is based on whatever it could read.");
+  else if(!code.hasWait&&code.kind==="TeleOp") add("struct:wait","fail","Missing waitForStart()",
+    "A LinearOpMode that never calls <code>waitForStart()</code> runs its loop during init and is stopped by the SDK.",null,
+    "Call <code>waitForStart();</code> before the main loop.");
+  if(!code.devices.length) add("struct:dev","warn","No hardware devices found",
+    "No <code>hardwareMap</code> lookups were recognized, so there is nothing to simulate.",null,
+    "The parser understands <code>hardwareMap.get(Type.class, \"name\")</code> and <code>hardwareMap.servo.get(\"name\")</code>.");
+
+  for(const d of code.devices){
+    if(!/Servo|DcMotor/i.test(d.type||"")) continue;          // sensors are read, not driven
+    if(!isCommanded(code,d.name)) add("idle:"+d.name,"warn","<code>"+d.name+"</code> is never commanded",
+      "It's declared and pulled out of <code>hardwareMap</code>, but nothing in the loop moves it.",null,
+      "Bind it to a control, or drop the declaration.");
+  }
+
+  // ---- torque on lift joints
+  for(const d of code.devices){
+    const mech=mechOf(d.name); if(!mech||mech.kind!=="revolute-lift") continue;
+    const lever=leverOf(mech); if(!(lever>0)) continue;
+    const spec=specFor(d,mech,trust);
+    if(spec.kind!=="servo") continue;
+    const distal=payload+SERVO_MASS+LINK_MASS;
+    const rng=travelRange(code,d.name)||{lo:0.5,hi:0.5};
+    const rest=restPosOf(code,d.name);
+    const a0=armAngleDeg(mech,spec,rng.lo,rest), a1=armAngleDeg(mech,spec,rng.hi,rest);
+    const wa=worstAngle(a0,a1);
+    const req=holdTorque(mech,wa,distal);
+    const usable=spec.stallNm*duty;
+    const ratio=usable/req;
+    const sev=ratio<1?"fail":(ratio<1.35?"warn":"pass");
+    const crosses=(Math.min(a0,a1)<=0&&Math.max(a0,a1)>=0);
+    const math=
+`joint     ${mlabel(mech)}  (lift)
+servo     ${spec.part||spec.fam}  [${spec.role}]
+source    ${spec.src}${spec.guess?"  (estimated spec)":""}
+lever     ${(lever*1000).toFixed(0)} mm${mech.leverOverride!=null?"  ← your value":"  measured from CAD"}
+sweep     ${a0.toFixed(0)}° → ${a1.toFixed(0)}°  off horizontal
+worst     ${wa.toFixed(0)}°${crosses?"  — sweeps through level":""}
+load      ${(distal*1000).toFixed(0)} g = ${(payload*1000).toFixed(0)} held + 60 servo + 55 link
+needed    ${req.toFixed(3)} N·m   m·g·r·cos θ
+usable    ${usable.toFixed(3)} N·m   ${spec.stallNm.toFixed(2)} stall × ${(duty*100).toFixed(0)}%
+headroom  ${ratio.toFixed(2)}×${ratio<1?"  ◄ SHORT":""}`;
+    if(sev==="fail")
+      add("torque:"+d.name,"fail","The "+mlabel(mech).toLowerCase()+" servo cannot hold the load it's carrying",
+        "<code>"+d.name+"</code> drives a <b>"+(lever*1000).toFixed(0)+" mm</b> lever with the end effector on it. "+
+        "The <b>"+spec.role.toLowerCase()+"</b> servo here gives <b>"+usable.toFixed(2)+" N·m</b> usable against <b>"+
+        req.toFixed(2)+" N·m</b> needed. It will buzz, sag under load, or refuse to lift.",math,
+        "Fit a higher-torque servo, shorten the lever, or add a counterbalance spring at the pivot.");
+    else if(sev==="warn")
+      add("torque:"+d.name,"warn","The "+mlabel(mech).toLowerCase()+" joint has very little torque margin",
+        "Headroom is <b>"+ratio.toFixed(2)+"×</b>. It will lift on a fresh battery and start sagging as voltage drops.",math,
+        "Move to a higher-torque servo or reduce the payload.");
+    else
+      add("torque:"+d.name,"pass","The "+mlabel(mech).toLowerCase()+" joint has torque headroom",
+        "<b>"+ratio.toFixed(2)+"×</b> margin between what the servo can hold and what the joint demands.",math,null);
+  }
+
+  // ---- code vs CAD hardware disagreement
+  const swaps=[];
+  for(const d of code.devices){
+    const mech=mechOf(d.name); if(!mech||!mech.part) continue;
+    const cadSpec=hwFromPart(mech.part,mech.partName); if(!cadSpec) continue;
+    if(d.declaredRole && cadSpec.kind==="servo" && cadSpec.role!==d.declaredRole)
+      swaps.push({dev:d, mech, cadSpec, kindClash:false});
+    else if(/DcMotor/i.test(d.type||"") && cadSpec.kind==="servo")
+      swaps.push({dev:d, mech, cadSpec, kindClash:true});
+    else if(/Servo/i.test(d.type||"") && !/CRServo/i.test(d.type||"") && cadSpec.kind==="motor")
+      swaps.push({dev:d, mech, cadSpec, kindClash:true});
+  }
+  if(swaps.length){
+    const rows=swaps.map(s=>{
+      const said=s.kindClash? s.dev.type : s.dev.declaredRole;
+      const has =s.kindClash? (s.cadSpec.kind==="servo"?"a servo":"a motor") : s.cadSpec.role;
+      return (s.dev.name+"        ").slice(0,9)+"code says "+(said+"       ").slice(0,8)+
+             "│ CAD has "+(has+"       ").slice(0,8)+"("+s.mech.part+")"; }).join("\n");
+    if(trust==="code")
+      add("swap","info","The CAD disagrees with your code about "+swaps.length+" device"+(swaps.length>1?"s":""),
+        "Hardware truth is set to <b>code</b>, so the bench is using your declarations and comments and ignoring these part numbers. "+
+        "Worth knowing the model is out of date, but nothing above depends on it.",rows,
+        "Update the CAD when you get a chance, or switch hardware truth to CAD to see what the model implies.");
+    else
+      add("swap","fail","Your code and your CAD disagree about which servo is which",
+        swaps.length+" device"+(swaps.length>1?"s are":" is")+" declared as one type but modelled as another. "+
+        "Hardware truth is set to <b>CAD</b>, so the numbers above use the part numbers.",rows,
+        "Switch hardware truth to <b>code</b> if the CAD is the stale one.");
+  }
+
+  // ---- travel sweeps
+  for(const d of code.devices){
+    const r=travelRange(code,d.name); if(!r||r.n<2) continue;
+    const mech=mechOf(d.name);
+    const spec=specFor(d,mech,trust);
+    if(spec.kind!=="servo") continue;
+    const span=r.hi-r.lo, deg=span*travelDegOf(spec);
+    if(span<0.05)
+      add("travel:"+d.name,"warn","<code>"+d.name+"</code> barely moves",
+        "Commanded positions span only <b>"+span.toFixed(2)+"</b> &mdash; about <b>"+deg.toFixed(0)+"°</b>. If the mechanism isn't reaching, this is why.",null,
+        "Widen the two constants and check the mechanism clears its frame.");
+    else
+      add("travel:"+d.name,"info","<code>"+d.name+"</code> sweeps "+deg.toFixed(0)+"°",
+        "Travel <b>"+r.lo.toFixed(2)+" → "+r.hi.toFixed(2)+"</b> on a "+travelDegOf(spec)+"° servo.",null,null);
+  }
+
+  // ---- a blocking wait inside the TeleOp loop freezes the whole robot
+  const sleeps=[];
+  (function findSleep(list,ctx){ for(const st of list){
+    if(st.kind==="if"){
+      const r=padRefs(st.condAst).map(splitPadRef).filter(Boolean)[0];
+      findSleep(st.then, r?("gamepad"+r.pad+"."+r.btn):ctx);
+      if(st.else) findSleep(st.else, ctx);
+    } else if(st.kind==="sleep") sleeps.push({ms:st.ms, on:ctx});
+  }})(code.stmts,null);
+  if(sleeps.length){
+    const total=sleeps.reduce((s,x)=>s+x.ms,0);
+    add("sleep","fail","<code>sleep()</code> inside the loop freezes the whole robot",
+      "A LinearOpMode runs one thread. While <code>sleep("+sleeps[0].ms+")</code> is blocking, nothing else in the loop runs &mdash; "+
+      "the drivetrain keeps its last power, no other button is read, and the PID loops stop updating. "+
+      "At <b>"+total+" ms</b> that is roughly <b>"+Math.round(total/20)+" loop cycles</b> of a robot that will not answer the driver.",
+      sleeps.map(x=>(x.on?x.on:"(loop body)")+"   sleep("+x.ms+")").join("\n"),
+      "Drive the delay off a timer instead: latch a state, note the time, and act on it in a later pass of the same loop.");
+  }
+
+  // ---- buttons wired to nothing
+  (function findEmpty(list){ for(const st of list){
+    if(st.kind!=="if") continue;
+    const r=padRefs(st.condAst).map(splitPadRef).filter(Boolean)[0];
+    if(r && !st.then.length && !(st.else&&st.else.length))
+      add("empty:"+r.pad+r.btn,"warn","<code>gamepad"+r.pad+"."+r.btn+"</code> is wired to an empty block",
+        "The button is tested but the body does nothing, so pressing it has no effect.",null,
+        "Fill it in or delete the block &mdash; an empty one reads like an unfinished binding.");
+    findEmpty(st.then); if(st.else) findEmpty(st.else);
+  }})(code.stmts);
+
+  // ---- mirrored pairs: one of the two should be reversed, not both or neither
+  const revd={};
+  (function scanDir(list){ for(const st of list){
+    if(st.kind==="if"){ scanDir(st.then); if(st.else) scanDir(st.else); }
+    else if(st.kind==="objcall"&&st.meth==="setDirection")
+      revd[st.obj]=/REVERSE/i.test(st.raw||"");
+  }})(code.inits.concat(code.stmts));
+  const pairs=[];
+  for(const d of code.devices){
+    const m=/^(.*?)(L|Left|left)$/.exec(d.name);
+    if(!m) continue;
+    const mate=code.devices.filter(x=>x.name===m[1]+"R"||x.name===m[1]+"Right"||x.name===m[1]+"right")[0];
+    if(!mate) continue;
+    pairs.push({a:d.name, b:mate.name, ra:!!revd[d.name], rb:!!revd[mate.name]});
+  }
+  const badPairs=pairs.filter(p=>p.ra===p.rb);
+  if(badPairs.length)
+    add("mirror","warn","A mirrored pair is set the same way round",
+      "<b>"+badPairs.map(p=>p.a+"/"+p.b).join(", ")+"</b> read as a left/right pair, but "+
+      (badPairs[0].ra?"both are reversed":"neither is reversed")+". A mirrored pair usually needs exactly one "+
+      "<code>setDirection(REVERSE)</code>, or the two halves fight each other.",
+      pairs.map(p=>(p.a+"        ").slice(0,10)+(p.ra?"REVERSED":"forward")+"   "+
+                   (p.b+"        ").slice(0,10)+(p.rb?"REVERSED":"forward")).join("\n"),
+      "Check how they're physically mounted — if they face opposite ways, one of them needs reversing.");
+  else if(pairs.length)
+    add("mirror","pass","Mirrored pairs are set opposite ways round",
+      pairs.map(p=>"<b>"+p.a+"/"+p.b+"</b>").join(", ")+" &mdash; exactly one of each pair is reversed, which is what a mirrored mounting needs.",
+      pairs.map(p=>(p.a+"        ").slice(0,10)+(p.ra?"REVERSED":"forward")+"   "+
+                   (p.b+"        ").slice(0,10)+(p.rb?"REVERSED":"forward")).join("\n"),null);
+
+  // ---- closed-loop motors
+  const pidNames=[];
+  for(const st of code.inits) if(st.kind==="pidnew") pidNames.push(st.obj);
+  if(pidNames.length)
+    add("pid","info",pidNames.length+" PID controller"+(pidNames.length>1?"s":"")+" driving motors",
+      "The bench runs these closed loops for real: it integrates each motor's encoder from commanded power, feeds "+
+      "<code>getCurrentPosition()</code> back in, and applies the output. Watch a target change and the motor chase it in the gauges.",
+      pidNames.join("\n"),
+      "Use it to check <b>which way</b> a target drives the mechanism and whether a button reaches the right one. "+
+      "Don't tune gains here &mdash; the motor model has no inertia, gravity load or friction, so overshoot on the bench won't match the robot.");
+
+  // ---- drivetrain
+  const dt=detectDrivetrain(code);
+  if(dt){
+    if(!dt.ok)
+      add("drive:names","warn","Drive motors don't name their side",
+        "Found <b>"+dt.wheels.length+"</b> stick-driven motors, but their names don't say which are left and which are right, so the bench can't tell which way the robot will go.",
+        dt.wheels.map(w=>w.dev).join("\n"),
+        "Name them <code>leftFront</code> / <code>rightFront</code> and so on.");
+    else
+      add("drive:ok","pass",dt.style==="mecanum"?"Mecanum drive reads correctly":"Tank drive reads correctly",
+        "<b>"+dt.wheels.length+"</b> motors mixing stick axes. Drive it with the left stick in the panel below and watch the base move.",
+        dt.wheels.map(w=>(w.dev+"              ").slice(0,15)+w.stmt.expr).join("\n"),null);
+    const allExpr=[];
+    (function walk(l){ for(const st of l){
+      if(st.kind==="if"){ walk(st.then); if(st.else) walk(st.else); }
+      else if(st.expr) allExpr.push(st.expr); } })(code.stmts);
+    const usesY=allExpr.some(e=>/left_stick_y/.test(e));
+    const negY =allExpr.some(e=>/-\s*gamepad\d\s*\.\s*left_stick_y/.test(e));
+    if(usesY && !negY)
+      add("drive:sticky","info","Check the sign on <code>left_stick_y</code>",
+        "On a real gamepad, pushing the stick <b>forward reports a negative value</b>. Most drivetrains need <code>-gamepad1.left_stick_y</code> or the robot drives backwards.",null,null);
+  }
+
+  // ---- CAD mechanisms nothing drives
+  const mapped={}; for(const k in map) if(map[k]) mapped[map[k]]=1;
+  for(const mech of cad.mechs) if(!mapped[mech.id]){
+    const cadSpec=mech.part?hwFromPart(mech.part,mech.partName):null;
+    add("unmapped:"+mech.id,"warn","CAD has an actuator on <b>"+mlabel(mech)+"</b> with no code behind it",
+      "The assembly mounts "+(cadSpec?"<code>"+mech.part+"</code>":"an actuator")+" on this mechanism, but no device in this OpMode maps to it.",null,
+      "Map it in the hardware table, or add the device if it really is unused.");
+  }
+
+  if(cad.mechs.length){
+    const chain=cad.mechs.map(m=>{
+      const carries=rigCarries(cad.mechs,m.id);
+      const dev=Object.keys(map).filter(k=>map[k]===m.id)[0];
+      return (mlabel(m)+"            ").slice(0,13)+
+             (JOINT_KINDS[m.kind].label+"              ").slice(0,15)+
+             (dev?dev:"—").padEnd(10)+
+             (carries.length? "swings "+carries.map(c=>mlabel(cad.mechs.filter(x=>x.id===c)[0])).join(", ") : "carries nothing");
+    }).join("\n");
+    add("rig","info","This is the chain the bench inferred",
+      "Joint types and what-moves-with-what are guessed from the CAD &mdash; axis direction, height, and which subassembly holds each actuator. "+
+      "On anything past a simple arm some of it will be wrong. Check it reads like your robot, and correct it in <b>Kinematics</b> if not.",
+      chain, "Everything in that panel is editable: rename a joint, change its type, change what it moves with, or flip its direction.");
+  }
+
+  const cfgs=code.devices.filter(d=>d.cfg).map(d=>'"'+d.cfg+'"');
+  if(cfgs.length) add("cfg","info","Config names still need checking by hand",
+    "This OpMode asks the Robot Controller for "+cfgs.join(", ")+". No CAD file can confirm those.",null,
+    "Open the config on the Driver Station and read the names back.");
+
+  const order={fail:0,warn:1,pass:2,info:3};
+  F.sort((a,b)=>order[a.sev]-order[b.sev]);
+  return F;
+}
+function restPosOf(code,devName){
+  for(const i of code.inits) if(i.dev===devName&&i.op==="setPosition"){
+    const v=staticValue(i.ast,code); if(v!==null) return v;
+    if(i.ast&&i.ast.o==="id"&&code.vars[i.ast.v]!==undefined) return code.vars[i.ast.v];
+  }
+  const r=travelRange(code,devName); return r?r.lo:0.5;
+}
+
+// ---- src/sim.js ----
+/* ============================================================
+   7.  SIMULATION  — interprets the statement tree
+   ============================================================ */
+const Sim={
+  dev:{}, vars:{}, pad:{1:{},2:{}}, t:0, chassis:{x:0,y:0,h:0},
+  reset(code,cad,map,opts){
+    this.dev={}; this.vars={}; this.t=0; this.chassis={x:0,y:0,h:0};
+    this.code=code; this.cad=cad; this.map=map; this.opts=opts;
+    for(const d of code.devices){
+      const mech=cad.mechs.filter(m=>m.id===map[d.name])[0]||null;
+      const spec=specFor(d,mech,opts.trust);
+      const isMotor=spec.kind==="motor"||spec.kind==="crservo";
+      this.dev[d.name]={kind:isMotor?"motor":"servo", mech, spec,
+        cmd:isMotor?0:0.5, act:isMotor?0:0.5, revs:0, ticks:0, stalled:false,
+        reversed:false,
+        tpr: 28*(spec.ratio||19.2),        // goBILDA: 28 counts per motor rev
+        restPos:restPosOf(code,d.name),
+        sec60:spec.sec60||0.18, travelDeg:travelDegOf(spec)};
+    }
+    this.pids={};
+    for(const v in code.vars) this.vars[v]=code.vars[v];
+    this.dt=0.02;
+    this.exec(code.inits,this.env());          // directions, PID objects, start positions
+    for(const n in this.dev){ const s=this.dev[n]; s.act=s.cmd; }
+    this.drivetrain=detectDrivetrain(code);
+  },
+  /* ---- PID objects the OpMode constructs (ftclib, RoadRunner, hand-rolled) ---- */
+  pidOp(name,meth,a){
+    const st=this.pids[name]||(this.pids[name]={p:0,i:0,d:0,sum:0,prev:null});
+    if(meth==="setPID"||meth==="setPIDF"){ st.p=a[0]||0; st.i=a[1]||0; st.d=a[2]||0; return 0; }
+    if(meth==="setP"){ st.p=a[0]||0; return 0; }
+    if(meth==="setI"){ st.i=a[0]||0; return 0; }
+    if(meth==="setD"){ st.d=a[0]||0; return 0; }
+    if(meth==="reset"){ st.sum=0; st.prev=null; return 0; }
+    if(meth==="calculate"){
+      const cur=a[0]||0, tgt=(a.length>1?a[1]:0)||0;
+      const err=tgt-cur, dt=this.dt||0.02;
+      st.sum=Math.max(-1e7,Math.min(1e7,st.sum+err*dt));
+      const der=(st.prev===null)?0:(err-st.prev)/dt;
+      st.prev=err;
+      st.err=err;
+      return st.p*err + st.i*st.sum + st.d*der;
+    }
+    return 0;
+  },
+  env(){
+    const self=this;
+    return {
+      get(n){
+        if(n==="__imuYaw") return self.chassis.h;
+        if(n==="__imuPitch"||n==="__imuRoll") return 0;
+        if(self.vars[n]!==undefined) return self.vars[n];
+        if(self.code.consts[n]!==undefined) return self.code.consts[n];
+        const m=/^([A-Za-z_$][\w$]*)\.getPosition$/.exec(n);
+        if(m&&self.dev[m[1]]) return self.dev[m[1]].cmd;
+        return 0;
+      },
+      device(name,meth){
+        const s=self.dev[name]; if(!s) return 0;
+        if(meth==="getCurrentPosition") return Math.round(s.ticks);
+        if(meth==="getPosition") return s.cmd;
+        if(meth==="getPower") return s.cmd;
+        if(meth==="getVelocity") return (s.spec.rpm||300)*s.act*s.tpr/60;
+        return 0;
+      },
+      pid(name,meth,a){ return self.pidOp(name,meth,a); },
+      pad(ref){
+        const r=splitPadRef(ref); if(!r) return 0;
+        const st=self.pad[r.pad]||{};
+        const v=st[r.btn];
+        if(v===undefined) return 0;
+        return typeof v==="boolean" ? (v?1:0) : v;
+      }
+    };
+  },
+  exec(list,env){
+    for(const st of list){
+      if(st.kind==="if"){
+        if(evalNode(st.condAst,env)) this.exec(st.then,env);
+        else if(st.else) this.exec(st.else,env);
+      }else if(st.kind==="assign"){
+        const v=evalNode(st.ast,env);
+        const cur=this.vars[st.name]!==undefined?this.vars[st.name]:(this.code.consts[st.name]||0);
+        this.vars[st.name] =
+          st.op==="+"?cur+v : st.op==="-"?cur-v : st.op==="*"?cur*v : st.op==="/"?(v?cur/v:cur) : v;
+      }else if(st.kind==="call"){
+        const s=this.dev[st.dev]; if(!s) continue;
+        const v=evalNode(st.ast,env);
+        /* setDirection(REVERSE) cancels a mirrored mounting. Since the bench
+           doesn't model the mirrored mounting either, applying the reversal
+           here would double-count it — a robot told to drive forward would
+           spin. It's tracked for reporting instead. */
+        if(st.op==="setPosition") s.cmd=clamp01(v);
+        else s.cmd=Math.max(-1,Math.min(1,st.op==="setVelocity"?v/1000:v));
+      }else if(st.kind==="pidnew"){
+        const a=st.args.map(x=>evalNode(x,env));
+        this.pidOp(st.obj,"setPID",a);
+      }else if(st.kind==="sleep"){
+        this.sleptMs=(this.sleptMs||0)+st.ms;      // flagged, not simulated
+      }else if(st.kind==="objcall"){
+        const s=this.dev[st.obj];
+        if(s&&st.meth==="setDirection") s.reversed=/REVERSE/i.test(st.raw||"");
+        else if(s&&st.meth==="setMode"&&/STOP_AND_RESET_ENCODER/i.test(st.raw||"")){ s.ticks=0; s.revs=0; }
+        else if(/^set(PID|PIDF|P|I|D)$|^reset$/.test(st.meth) && !s)
+          this.pidOp(st.obj,st.meth,st.args.map(x=>evalNode(x,env)));
+        else if(st.meth==="resetYaw") this.chassis.h=0;
+      }
+    }
+  },
+  tick(dt){
+    if(!this.code) return;
+    this.t+=dt; this.dt=dt;
+    this.exec(this.code.stmts,this.env());
+
+    for(const name in this.dev){
+      const s=this.dev[name];
+      if(s.kind==="motor"){
+        const slew=8*dt;
+        s.act += Math.sign(s.cmd-s.act)*Math.min(Math.abs(s.cmd-s.act),slew);
+        const rpm=(s.spec.rpm||300)*s.act;
+        s.revs += rpm/60*dt;
+        s.ticks = s.revs*s.tpr;                 // what getCurrentPosition() reads
+        s.stalled=false;
+        continue;
+      }
+      const rate=60/(s.sec60*s.travelDeg);
+      const err=s.cmd-s.act;
+      const step=Math.sign(err)*Math.min(Math.abs(err), rate*dt);
+      const want=s.act+step;
+      s.stalled=false;
+      if(s.mech&&s.mech.kind==="revolute-lift"&&leverOf(s.mech)>0&&s.spec.stallNm){
+        const distal=this.opts.payloadKg+0.060+0.055;
+        const usable=s.spec.stallNm*this.opts.duty;
+        const req=holdTorque(s.mech, armAngleDeg(s.mech,s.spec,want,s.restPos), distal);
+        if(req>usable){ s.stalled=true; if(step>0) continue; }
+      }
+      s.act=want;
+    }
+    this.driveChassis(dt);
+  },
+  driveChassis(dt){
+    const dtn=this.drivetrain;
+    if(!dtn||!dtn.ok){ return; }
+    let L=0,R=0,nl=0,nr=0,strafe=0,ns=0;
+    for(const w of dtn.wheels){
+      const s=this.dev[w.dev]; if(!s) continue;
+      if(w.left){ L+=s.act; nl++; } else if(w.right){ R+=s.act; nr++; }
+    }
+    if(nl) L/=nl; if(nr) R/=nr;
+    if(dtn.style==="mecanum"){
+      // strafe shows up as front/back disagreement on the same side
+      const lf=this.dev[(dtn.wheels.filter(w=>w.left&&w.front)[0]||{}).dev];
+      const lb=this.dev[(dtn.wheels.filter(w=>w.left&&w.back)[0]||{}).dev];
+      if(lf&&lb){ strafe=(lf.act-lb.act)/2; ns=1; }
+    }
+    const SPEED=1.15, TURN=3.4;               // m/s and rad/s at full power
+    const v=(L+R)/2*SPEED, w=(R-L)/2*TURN;
+    this.chassis.h += w*dt;
+    this.chassis.x += (v*Math.cos(this.chassis.h) - strafe*SPEED*Math.sin(this.chassis.h))*dt;
+    this.chassis.y += (v*Math.sin(this.chassis.h) + strafe*SPEED*Math.cos(this.chassis.h))*dt;
+    const LIM=1.78;                            // half an FTC field
+    this.chassis.x=Math.max(-LIM,Math.min(LIM,this.chassis.x));
+    this.chassis.y=Math.max(-LIM,Math.min(LIM,this.chassis.y));
+  }
+};
+const clamp01=v=>Math.max(0,Math.min(1,v));
+
+// ---- src/view3d.js ----
+/* ============================================================
+   8.  3D VIEW — articulated, driven by the sim
+   ============================================================ */
+const View={
+  init(el){
+    this.el=el;
+    this.scene=new THREE.Scene();
+    this.cam=new THREE.PerspectiveCamera(42,1,0.01,200);
+    this.ren=new THREE.WebGLRenderer({antialias:true});
+    this.ren.setPixelRatio(Math.min(devicePixelRatio,2));
+    this.ren.setClearColor(0x000000,0);
+    el.appendChild(this.ren.domElement);
+    this.world=new THREE.Group(); this.scene.add(this.world);
+    this.theta=-0.7; this.phi=1.15; this.rad=0.95; this.size=0.5;
+    this.bind(); this.resize();
+  },
+  bind(){
+    const c=this.ren.domElement; let drag=false,lx=0,ly=0;
+    c.addEventListener("pointerdown",e=>{drag=true;lx=e.clientX;ly=e.clientY;c.setPointerCapture(e.pointerId);});
+    c.addEventListener("pointerup",()=>{drag=false;});
+    c.addEventListener("pointercancel",()=>{drag=false;});
+    c.addEventListener("pointermove",e=>{ if(!drag) return;
+      this.theta-=(e.clientX-lx)*0.008;
+      this.phi=Math.max(0.08,Math.min(3.05,this.phi-(e.clientY-ly)*0.008));
+      lx=e.clientX; ly=e.clientY; });
+    c.addEventListener("wheel",e=>{ e.preventDefault();
+      this.rad=Math.max(0.12,Math.min(24,this.rad*(1+Math.sign(e.deltaY)*0.09))); },{passive:false});
+    addEventListener("resize",()=>this.resize());
+  },
+  resize(){ const w=this.el.clientWidth,h=this.el.clientHeight; if(!w||!h) return;
+    this.cam.aspect=w/h; this.cam.updateProjectionMatrix(); this.ren.setSize(w,h,false); },
+
+  /* world (Z-up, metres) → view (Y-up) */
+  v3(p){ return new THREE.Vector3(p[0]-this.c[0], p[2]-this.c[2], -(p[1]-this.c[1])); },
+  vAxis(a){ return new THREE.Vector3(a[0],a[2],-a[1]).normalize(); },
+
+  load(cad){
+    while(this.world.children.length) this.world.remove(this.world.children[0]);
+    const bb=cad.bbox;
+    this.c=[0,1,2].map(i=>(bb.min[i]+bb.max[i])/2);
+    const size=Math.max(bb.max[0]-bb.min[0],bb.max[1]-bb.min[1],bb.max[2]-bb.min[2])||0.5;
+    this.size=size; this.cad=cad;
+
+    // ---- field floor
+    const grid=new THREE.GridHelper(3.66,24,0x33414F,0x1B2430);
+    grid.position.y=bb.min[2]-this.c[2];
+    this.world.add(grid); this.grid=grid;
+
+    // ---- chassis group carries everything that drives around
+    this.chassisG=new THREE.Group(); this.world.add(this.chassisG);
+
+    const M=cad.mechs;
+    const distSeg=(p,a,b)=>{
+      const ab=[b[0]-a[0],b[1]-a[1],b[2]-a[2]];
+      const L2=ab[0]*ab[0]+ab[1]*ab[1]+ab[2]*ab[2];
+      let t=0;
+      if(L2>1e-12) t=Math.max(0,Math.min(1,((p[0]-a[0])*ab[0]+(p[1]-a[1])*ab[1]+(p[2]-a[2])*ab[2])/L2));
+      const q=[a[0]+ab[0]*t, a[1]+ab[1]*t, a[2]+ab[2]*t];
+      return Math.hypot(p[0]-q[0],p[1]-q[1],p[2]-q[2]);
+    };
+    /* every link's own span: its pivot out to whatever it carries */
+    const segs=M.filter(m=>m.pivot).map(m=>({id:m.id, m, a:m.pivot, b:m.distalTo||m.pivot}));
+
+    /* Points far out from a root joint's axis are frame, not turret — they
+       stay behind while the column above the joint swings. */
+    const radialTo=(p,m)=>{
+      const a=m.pivot, ax=m.axis;
+      const d=[p[0]-a[0],p[1]-a[1],p[2]-a[2]];
+      const t=d[0]*ax[0]+d[1]*ax[1]+d[2]*ax[2];
+      return Math.hypot(d[0]-ax[0]*t, d[1]-ax[1]*t, d[2]-ax[2]*t);
+    };
+    const groups={chassis:[]};
+    M.forEach(m=>groups[m.id]=[]);
+    const pts=cad.points||[];
+    const stride=Math.max(1,Math.ceil(pts.length/110000));
+    for(let i=0;i<pts.length;i+=stride){
+      const p=pts[i];
+      if(!segs.length){ groups.chassis.push(p); continue; }
+      let best=null, bd=1e9;
+      for(const s of segs){ const d=distSeg(p,s.a,s.b); if(d<bd){bd=d; best=s;} }
+      let id=best.id;
+      const m=best.m;
+      // a leaf effector only claims what is genuinely near it
+      if(!rigKids(M,m.id).length && m.lever>0 && bd>m.lever*0.55 && m.parent!=="chassis") id=m.parent;
+      // and a root joint only carries what sits inside its turret radius
+      const root = M.filter(x=>x.id===id)[0];
+      if(root && root.parent==="chassis" && root.kind==="revolute-yaw"){
+        const turretR=Math.max(size*0.10, (root.lever||size*0.3)*this.turretScale);
+        if(radialTo(p,root)>turretR) id="chassis";
+      }
+      (groups[id]||groups.chassis).push(p);
+    }
+
+    const TINT={"revolute-yaw":[0.62,0.70,0.86],"revolute-lift":[0.36,0.68,1.00],
+                "linear":[0.55,0.62,1.00],"effector":[0.30,0.85,0.68],"fixed":[0.55,0.60,0.68]};
+    const mkPoints=(list,tint)=>{
+      const n=list.length; if(!n) return null;
+      const pos=new Float32Array(n*3), col=new Float32Array(n*3);
+      const zmin=bb.min[2], zspan=(bb.max[2]-zmin)||1;
+      for(let i=0;i<n;i++){
+        const v=this.v3(list[i]);
+        pos[i*3]=v.x; pos[i*3+1]=v.y; pos[i*3+2]=v.z;
+        const t=Math.max(0,Math.min(1,(list[i][2]-zmin)/zspan));
+        col[i*3]=tint[0]*(0.62+0.5*t); col[i*3+1]=tint[1]*(0.62+0.5*t); col[i*3+2]=tint[2]*(0.62+0.5*t);
+      }
+      const g=new THREE.BufferGeometry();
+      g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+      g.setAttribute("color",new THREE.BufferAttribute(col,3));
+      return new THREE.Points(g,new THREE.PointsMaterial({size:size*0.0042,vertexColors:true,sizeAttenuation:true}));
+    };
+
+    const chasP=mkPoints(groups.chassis,[0.50,0.60,0.72]);
+    if(chasP) this.chassisG.add(chasP);
+
+    /* ---- build the hierarchy from the rig, whatever shape it is ---- */
+    const COL={"revolute-lift":0x4D9FFF,"revolute-yaw":0xE0A42E,"effector":0x3FB68B,
+               "linear":0x8C9EFF,"fixed":0x8899AA};
+    this.jawSets=[];
+    const buildLink=(mech,parentInv)=>{
+      const g=new THREE.Group();  g.position.copy(this.v3(mech.pivot));
+      const inv=new THREE.Group(); inv.position.copy(this.v3(mech.pivot).clone().multiplyScalar(-1));
+      g.add(inv); parentInv.add(g);
+      mech._g=g; mech._inv=inv;
+
+      const p=mkPoints(groups[mech.id]||[], TINT[mech.kind]||TINT.fixed);
+      if(p) inv.add(p);
+
+      const s=new THREE.Mesh(new THREE.SphereGeometry(size*0.026,14,10),
+              new THREE.MeshBasicMaterial({color:COL[mech.kind]||0x8899AA}));
+      s.position.copy(this.v3(mech.pivot)); inv.add(s);
+      if(mech.distalTo){
+        const gg=new THREE.BufferGeometry().setFromPoints([this.v3(mech.pivot),this.v3(mech.distalTo)]);
+        inv.add(new THREE.Line(gg,new THREE.LineBasicMaterial({color:COL[mech.kind]||0x8899AA})));
+      }
+      if(mech.kind==="effector"){
+        const par=M.filter(x=>x.id===mech.parent)[0];
+        const from=par?par.pivot:[mech.pivot[0],mech.pivot[1],mech.pivot[2]-size*0.1];
+        const reach=Math.max(size*0.05, Math.hypot(
+          mech.pivot[0]-from[0],mech.pivot[1]-from[1],mech.pivot[2]-from[2])*0.30);
+        const o=this.v3(mech.pivot);
+        const dir=this.v3(mech.pivot).sub(this.v3(from)).normalize();
+        if(!isFinite(dir.x)||dir.length()<0.1) dir.set(0,1,0);
+        const side=new THREE.Vector3().crossVectors(dir,new THREE.Vector3(0,1,0));
+        if(side.length()<0.1) side.set(1,0,0); else side.normalize();
+        const mk=()=>{ const gg=new THREE.BufferGeometry().setFromPoints([o.clone(),o.clone()]);
+          const l=new THREE.Line(gg,new THREE.LineBasicMaterial({color:0x3FB68B})); inv.add(l); return l; };
+        this.jawSets.push({mech, a:mk(), b:mk(), o, dir, side, reach});
+      }
+      for(const k of rigKids(M,mech.id)) buildLink(k,inv);
+    };
+    for(const r of rigRoots(M)) buildLink(r,this.chassisG);
+
+    this.groupCounts={chassis:groups.chassis.length};
+    M.forEach(m=>this.groupCounts[m.id]=(groups[m.id]||[]).length);
+    this.rad=size*1.9;
+    this.baseY=bb.min[2]-this.c[2];
+  },
+  turretScale:0.55,
+
+  update(){
+    if(!this.cad) return;
+    const ch=Sim.chassis;
+    this.chassisG.position.set(ch.x, 0, -ch.y);
+    this.chassisG.rotation.y = -ch.h;
+
+    for(const m of this.cad.mechs){
+      if(!m._g) continue;
+      const dn=deviceOn(m.id);
+      const s=dn?Sim.dev[dn]:null;
+      if(!s) continue;
+      const travel=(s.act-s.restPos);
+      if(m.kind==="revolute-yaw"||m.kind==="revolute-lift"){
+        const ang=travel*(s.travelDeg||300)*Math.PI/180*(m.dir||1)*(m.kind==="revolute-lift"?-1:1);
+        m._g.quaternion.setFromAxisAngle(this.vAxis(m.axis), ang);
+      }else if(m.kind==="linear"){
+        const d=travel*(m.lever||this.size*0.3)*(m.dir||1);
+        m._g.position.copy(this.v3(m.pivot).add(this.vAxis(m.axis).multiplyScalar(d)));
+      }
+    }
+    for(const J of this.jawSets||[]){
+      const dn=deviceOn(J.mech.id);
+      const s=dn?Sim.dev[dn]:null;
+      const open=s? (1-clamp01(s.act))*0.9+0.12 : 0.5;
+      const setL=(line,sgn)=>{
+        const end=J.o.clone().add(J.dir.clone().multiplyScalar(J.reach))
+                  .add(J.side.clone().multiplyScalar(sgn*J.reach*open));
+        line.geometry.setFromPoints([J.o.clone(),end]);
+      };
+      setL(J.a,1); setL(J.b,-1);
+    }
+  },
+  setView(v){
+    if(v==="front"){ this.theta=-Math.PI/2; this.phi=Math.PI/2; }
+    else if(v==="side"){ this.theta=0; this.phi=Math.PI/2; }
+    else if(v==="top"){ this.theta=-Math.PI/2; this.phi=0.09; }
+    else { this.theta=-0.7; this.phi=1.15; }
+    this.rad=this.size*1.9;
+  },
+  render(){
+    if(!this.cam) return;
+    const r=this.rad;
+    this.cam.position.set(r*Math.sin(this.phi)*Math.cos(this.theta), r*Math.cos(this.phi)+this.size*0.12, r*Math.sin(this.phi)*Math.sin(this.theta));
+    this.cam.lookAt(0,0,0);
+    this.ren.render(this.scene,this.cam);
+  }
+};
+function deviceOn(mechId){
+  for(const n in MAP) if(MAP[n]===mechId && Sim.dev[n]) return n;
+  return null;
+}
+
+// ---- src/app.js ----
+/* ============================================================
+   9.  UI
+   ============================================================ */
+const $=s=>document.querySelector(s);
+let CODE=null, CAD=null, MAP={}, FINDINGS=[], activePad=2;
+const OPTS={payloadKg:0.180, duty:0.30, trust:"code"};
+let IGNORED={};
+try{ IGNORED=JSON.parse(localStorage.getItem("ftcbench.ignored")||"{}")||{}; }catch(e){ IGNORED={}; }
+function saveIgnored(){ try{ localStorage.setItem("ftcbench.ignored",JSON.stringify(IGNORED)); }catch(e){} }
+
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* ---------- gamepad ---------- */
+const PAD_GEO=[
+  {id:"left_bumper", x:78,  y:26, w:62, h:17, r:8,  t:"LB"},
+  {id:"right_bumper",x:288, y:26, w:62, h:17, r:8,  t:"RB"},
+  {id:"left_trigger",x:82,  y:6,  w:54, h:14, r:7,  t:"LT"},
+  {id:"right_trigger",x:292,y:6,  w:54, h:14, r:7,  t:"RT"},
+  {id:"y", cx:322, cy:70, r:14, t:"Y"},
+  {id:"b", cx:346, cy:94, r:14, t:"B"},
+  {id:"a", cx:322, cy:118,r:14, t:"A"},
+  {id:"x", cx:298, cy:94, r:14, t:"X"},
+  {id:"dpad_up",   x:96, y:82, w:17, h:19, r:3, t:"↑"},
+  {id:"dpad_down", x:96, y:117,w:17, h:19, r:3, t:"↓"},
+  {id:"dpad_left", x:78, y:100,w:19, h:17, r:3, t:"←"},
+  {id:"dpad_right",x:113,y:100,w:19, h:17, r:3, t:"→"},
+  {id:"back",  x:176, y:80, w:26, h:13, r:6, t:"BK"},
+  {id:"start", x:226, y:80, w:26, h:13, r:6, t:"ST"}
+];
+const STICKS=[{id:"left", cx:160, cy:141, r:22, ax:"left_stick_x", ay:"left_stick_y", t:"LS"},
+              {id:"right",cx:266, cy:141, r:22, ax:"right_stick_x",ay:"right_stick_y",t:"RS"}];
+
+function boundMap(){
+  const b={};
+  if(CODE) for(const bd of CODE.bindings) if(bd.pad===activePad){
+    (b[bd.btn]=b[bd.btn]||[]).push(bd);
+    if(bd.axes) bd.axes.forEach(a=>{ const r=splitPadRef(a); if(r) (b[r.btn]=b[r.btn]||[]).push(bd); });
+  }
+  return b;
+}
+function renderPad(){
+  const bound=boundMap();
+  let s=`<svg class="padsvg" viewBox="0 0 428 194" role="group" aria-label="Virtual FTC gamepad ${activePad}">`;
+  s+=`<path class="shell" d="M60 60 Q60 34 92 34 L336 34 Q368 34 368 60 L368 96
+      Q368 134 340 152 Q318 166 300 148 L272 120 L156 120 L128 148
+      Q110 166 88 152 Q60 134 60 96 Z"/>`;
+  s+=`<text class="cap" x="214" y="60">gamepad${activePad}</text>`;
+  for(const g of PAD_GEO){
+    const bd=bound[g.id];
+    const cls="btn"+(bd?" bound":"");
+    const aria=bd?`${g.t}: ${describe(bd)}`:`${g.t}: unbound`;
+    if(g.cx!==undefined){
+      s+=`<circle class="${cls}" data-btn="${g.id}" cx="${g.cx}" cy="${g.cy}" r="${g.r}" tabindex="0" role="button" aria-label="${esc(aria)}"><title>${esc(aria)}</title></circle>`;
+      s+=`<text class="lbl" x="${g.cx}" y="${g.cy}">${g.t}</text>`;
+    }else{
+      s+=`<rect class="${cls}" data-btn="${g.id}" x="${g.x}" y="${g.y}" width="${g.w}" height="${g.h}" rx="${g.r}" tabindex="0" role="button" aria-label="${esc(aria)}"><title>${esc(aria)}</title></rect>`;
+      s+=`<text class="lbl" x="${g.x+g.w/2}" y="${g.y+g.h/2}">${g.t}</text>`;
+    }
+  }
+  for(const k of STICKS){
+    const bd=bound[k.ax]||bound[k.ay];
+    const aria=bd?`${k.t} stick: ${describe(bd)}`:`${k.t} stick: unbound`;
+    s+=`<circle class="stickwell${bd?" bound":""}" data-stick="${k.id}" cx="${k.cx}" cy="${k.cy}" r="${k.r}" tabindex="0" role="slider" aria-label="${esc(aria)}"><title>${esc(aria)}</title></circle>`;
+    s+=`<circle class="stickknob" data-knob="${k.id}" cx="${k.cx}" cy="${k.cy}" r="7"/>`;
+    s+=`<text class="lbl" x="${k.cx}" y="${k.cy+k.r+8}">${k.t}</text>`;
+  }
+  s+=`</svg>`;
+  $("#padwrap").innerHTML=s;
+
+  $("#padwrap").querySelectorAll("[data-btn]").forEach(el=>{
+    const b=el.dataset.btn;
+    const dn=e=>{ if(e.cancelable) e.preventDefault(); Sim.pad[activePad][b]=true; el.classList.add("down"); };
+    const up=()=>{ Sim.pad[activePad][b]=false; el.classList.remove("down"); };
+    el.addEventListener("pointerdown",dn);
+    el.addEventListener("pointerup",up);
+    el.addEventListener("pointerleave",up);
+    el.addEventListener("keydown",e=>{ if(e.key===" "||e.key==="Enter") dn(e); });
+    el.addEventListener("keyup",e=>{ if(e.key===" "||e.key==="Enter") up(); });
+  });
+  STICKS.forEach(k=>{
+    const well=$(`[data-stick="${k.id}"]`), knob=$(`[data-knob="${k.id}"]`);
+    if(!well) return;
+    let dragging=false;
+    const set=(dx,dy)=>{
+      const L=Math.hypot(dx,dy), max=k.r-7;
+      if(L>max){ dx*=max/L; dy*=max/L; }
+      knob.setAttribute("cx",k.cx+dx); knob.setAttribute("cy",k.cy+dy);
+      Sim.pad[activePad][k.ax]= +(dx/max).toFixed(3);
+      Sim.pad[activePad][k.ay]= +(dy/max).toFixed(3);   // down is positive, as on a real pad
+    };
+    const rel=()=>{ dragging=false; knob.setAttribute("cx",k.cx); knob.setAttribute("cy",k.cy);
+      Sim.pad[activePad][k.ax]=0; Sim.pad[activePad][k.ay]=0; };
+    const toLocal=e=>{
+      const svg=$("#padwrap svg"); const r=svg.getBoundingClientRect();
+      const sx=428/r.width, sy=194/r.height;
+      return [(e.clientX-r.left)*sx-k.cx, (e.clientY-r.top)*sy-k.cy];
+    };
+    well.addEventListener("pointerdown",e=>{ dragging=true; well.setPointerCapture(e.pointerId);
+      const p=toLocal(e); set(p[0],p[1]); });
+    well.addEventListener("pointermove",e=>{ if(!dragging) return; const p=toLocal(e); set(p[0],p[1]); });
+    well.addEventListener("pointerup",rel);
+    well.addEventListener("pointercancel",rel);
+    well.addEventListener("keydown",e=>{
+      const s=0.5; let dx=0,dy=0;
+      if(e.key==="ArrowLeft")dx=-s; else if(e.key==="ArrowRight")dx=s;
+      else if(e.key==="ArrowUp")dy=-s; else if(e.key==="ArrowDown")dy=s; else return;
+      e.preventDefault(); set(dx*(k.r-7),dy*(k.r-7));
+    });
+    well.addEventListener("blur",rel);
+  });
+  renderBindList();
+}
+function describe(bds){
+  const list=Array.isArray(bds)?bds:[bds];
+  const seen={};
+  return list.map(b=>{
+    const key=b.dev+b.op+b.expr; if(seen[key]) return null; seen[key]=1;
+    return b.assign ? `${b.dev} ${b.op} ${b.expr}` : `${b.dev}.${b.op}(${b.expr})`;
+  }).filter(Boolean).join("  ·  ");
+}
+function renderBindList(){
+  if(!CODE){ $("#bindlist").innerHTML=""; return; }
+  const bs=CODE.bindings.filter(b=>b.pad===activePad);
+  if(!bs.length){ $("#bindlist").innerHTML=
+    `<div class="bindrow"><span class="bk">—</span><span class="bd" style="color:var(--tx-3)">Nothing on gamepad${activePad} in this OpMode.</span></div>`; return; }
+  const byBtn={};
+  for(const b of bs) (byBtn[b.btn]=byBtn[b.btn]||[]).push(b);
+  $("#bindlist").innerHTML=Object.keys(byBtn).map(btn=>{
+    const g=byBtn[btn];
+    const label=btn.replace(/^dpad_/,"D-").replace(/left_bumper/,"LB").replace(/right_bumper/,"RB")
+                   .replace(/left_trigger/,"LT").replace(/right_trigger/,"RT")
+                   .replace(/left_stick_/,"LS ").replace(/right_stick_/,"RS ")
+                   .replace(/_/g," ").toUpperCase();
+    const analog=g[0].analog;
+    return `<div class="bindrow" data-btn="${btn}">
+      <span class="bk">${esc(label.slice(0,7))}</span>
+      <span class="bd"><b>${esc(describe(g))}</b>
+      <span class="edge">${analog?"analog — follows the stick":(g[0].cond?"when "+esc(g[0].cond.trim().slice(0,52)):"while held")}</span></span></div>`;
+  }).join("");
+}
+
+/* ---------- gauges ---------- */
+const ARC_R=34, ARC_A0=Math.PI*0.78, ARC_A1=Math.PI*2.22;
+function arcPath(t0,t1){
+  const a0=ARC_A0+(ARC_A1-ARC_A0)*t0, a1=ARC_A0+(ARC_A1-ARC_A0)*t1;
+  const x0=48+ARC_R*Math.cos(a0), y0=44+ARC_R*Math.sin(a0);
+  const x1=48+ARC_R*Math.cos(a1), y1=44+ARC_R*Math.sin(a1);
+  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${ARC_R} ${ARC_R} 0 ${(a1-a0)>Math.PI?1:0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+function buildGauges(){
+  if(!CODE){ $("#gauges").innerHTML=""; return; }
+  if(!CODE.devices.length){ $("#gauges").innerHTML=`<p class="meta" style="grid-column:1/-1">No devices to show.</p>`; return; }
+  $("#gauges").innerHTML=CODE.devices.map(d=>{
+    const s=Sim.dev[d.name];
+    const isMotor=s&&s.kind==="motor";
+    const r=travelRange(CODE,d.name);
+    const lo=isMotor?0:(r?r.lo:0), hi=isMotor?1:(r?r.hi:1);
+    const spec=s?s.spec:null;
+    return `<div class="gauge" data-dev="${esc(d.name)}" data-motor="${isMotor?1:0}">
+      <div class="stallflag" style="display:none">STALL</div>
+      <svg viewBox="0 0 96 78">
+        <path class="g-track" d="${arcPath(0,1)}"/>
+        ${isMotor?"":`<path class="g-range" d="${arcPath(lo,hi)}"/>`}
+        <path class="g-fill" d="${arcPath(0,0.001)}" data-fill></path>
+        <line class="g-cmd" data-cmd x1="48" y1="44" x2="48" y2="12"></line>
+        <text x="48" y="46" text-anchor="middle" dominant-baseline="central"
+              style="font-family:var(--mono);font-size:15px;font-weight:700;fill:var(--tx)" data-val>0.00</text>
+        <text x="48" y="61" text-anchor="middle" style="font-family:var(--mono);font-size:8.5px;fill:var(--tx-3)" data-deg>—</text>
+      </svg>
+      <div class="gname">${esc(d.name)}</div>
+      <div class="gsub">${spec?esc(isMotor?"power":spec.role):"unmapped"}</div>
+    </div>`;
+  }).join("");
+}
+function updateGauges(){
+  document.querySelectorAll(".gauge").forEach(el=>{
+    const s=Sim.dev[el.dataset.dev]; if(!s) return;
+    const isMotor=el.dataset.motor==="1";
+    const t=isMotor? (s.act+1)/2 : clamp01(s.act);
+    const tc=isMotor? (s.cmd+1)/2 : clamp01(s.cmd);
+    el.querySelector("[data-fill]").setAttribute("d",arcPath(isMotor?0.5:0,Math.max(0.002,t)));
+    const a=ARC_A0+(ARC_A1-ARC_A0)*clamp01(tc);
+    const ln=el.querySelector("[data-cmd]");
+    ln.setAttribute("x2",(48+ARC_R*1.14*Math.cos(a)).toFixed(2));
+    ln.setAttribute("y2",(44+ARC_R*1.14*Math.sin(a)).toFixed(2));
+    el.querySelector("[data-val]").textContent = isMotor? s.act.toFixed(2) : s.act.toFixed(2);
+    el.querySelector("[data-deg]").textContent = isMotor
+      ? ((s.spec.rpm||0)*s.act).toFixed(0)+" rpm"
+      : (s.act*s.travelDeg).toFixed(0)+"°";
+    el.classList.toggle("stalled",s.stalled);
+    el.querySelector(".stallflag").style.display=s.stalled?"block":"none";
+  });
+}
+
+/* ---------- side elevation (the torque angle) ---------- */
+function renderMech(){
+  const M=CAD?CAD.mechs:[];
+  const byKind=k=>M.filter(m=>m.kind===k)[0]||null;
+  const R={lift:byKind("revolute-lift"), yaw:byKind("revolute-yaw"), eff:byKind("effector")};
+  const liftDev=R.lift?deviceOn(R.lift.id):null;
+  const effDev =R.eff ?deviceOn(R.eff.id ):null;
+  const yawDev =R.yaw ?deviceOn(R.yaw.id ):null;
+  const aS=liftDev?Sim.dev[liftDev]:null, cS=effDev?Sim.dev[effDev]:null, yS=yawDev?Sim.dev[yawDev]:null;
+  if(!R.lift||!aS)
+    return `<svg viewBox="0 0 340 150" role="img" aria-label="No lift joint"><rect width="340" height="150" fill="#0E1218"/>
+      <text x="170" y="70" text-anchor="middle" style="font-family:var(--mono);font-size:11px;fill:#5C6B7D">no lift joint mapped</text>
+      <text x="170" y="88" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:#44515F">this view shows the angle a lifting joint works at</text></svg>`;
+
+  const L=leverOf(R.lift)*1000||163;
+  const ang=(R.lift.restAngleDeg + (aS.act-aS.restPos)*aS.travelDeg) * Math.PI/180;
+  const PX=140, PY=64, ARM=104;
+  const ex=PX+Math.cos(ang)*ARM, ey=PY-Math.sin(ang)*ARM;
+  const open=cS?(1-clamp01(cS.act))*12+4:8;
+  const stall=aS.stalled;
+  const degTxt=(ang*180/Math.PI).toFixed(0);
+  return `<svg viewBox="0 0 340 170" role="img" aria-label="Side elevation: lift arm at ${degTxt} degrees from horizontal">
+    <rect width="340" height="170" fill="#0E1218"/>
+    <line x1="0" y1="152" x2="340" y2="152" stroke="#26313F"/>
+    <line x1="${PX}" y1="${PY}" x2="325" y2="${PY}" stroke="#2E3A49" stroke-dasharray="3 3"/>
+    <text x="327" y="${PY+3}" style="font-family:var(--mono);font-size:8px;fill:#4E5C6D" text-anchor="end">horizontal</text>
+    <rect x="${PX-40}" y="126" width="80" height="26" rx="3" fill="#1C242F" stroke="#2F3B4A"/>
+    <text x="${PX}" y="142" text-anchor="middle" style="font-family:var(--mono);font-size:8px;fill:#6F7F92">FRAME · fixed</text>
+    ${yS?`<text x="328" y="${PY+34}" text-anchor="end" style="font-family:var(--mono);font-size:9px;fill:#8B9BAF">${esc(mlabel(R.yaw))} turret ${((yS.act-yS.restPos)*yS.travelDeg).toFixed(0)}°</text>
+    <text x="328" y="${PY+46}" text-anchor="end" style="font-family:var(--mono);font-size:8px;fill:#5C6B7D">swings the whole arm</text>`:""}
+    <rect x="${PX-8}" y="${PY}" width="16" height="${126-PY}" fill="#222E3B" stroke="#33414F"/>
+    <line x1="${PX}" y1="${PY}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${stall?"#E4574E":"#4D9FFF"}" stroke-width="9" stroke-linecap="round"/>
+    <circle cx="${PX}" cy="${PY}" r="9" fill="#0E1218" stroke="${stall?"#E4574E":"#4D9FFF"}" stroke-width="3"/>
+    <g transform="translate(${ex.toFixed(1)},${ey.toFixed(1)}) rotate(${(-ang*180/Math.PI).toFixed(1)})">
+      <line x1="0" y1="0" x2="15" y2="${(-open).toFixed(1)}" stroke="#3FB68B" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="0" y1="0" x2="15" y2="${open.toFixed(1)}" stroke="#3FB68B" stroke-width="4.5" stroke-linecap="round"/>
+      <circle cx="0" cy="0" r="5.5" fill="#0E1218" stroke="#3FB68B" stroke-width="2.5"/>
+    </g>
+    <text x="12" y="20" style="font-family:var(--mono);font-size:9.5px;fill:#8B9BAF">${L.toFixed(0)} mm lever</text>
+    <text x="12" y="34" style="font-family:var(--mono);font-size:9.5px;fill:${Math.abs(+degTxt)<12?"#E0A42E":"#6F7F92"}">${degTxt}° off horizontal</text>
+    ${stall?`<rect x="196" y="10" width="132" height="22" rx="3" fill="#2E1715" stroke="#E4574E"/>
+      <text x="262" y="25" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;font-weight:700;fill:#E4574E">STALLED — CAN'T LIFT</text>`:""}
+  </svg>`;
+}
+
+/* ---------- telemetry ---------- */
+function renderDS(){
+  if(!CODE) return "";
+  let out="";
+  const env=Sim.env();
+  for(const t of CODE.telemetry){
+    if(t.kind==="addLine"){ out+= t.label? `<div class="dsl">${esc(t.label)}</div>` : `<div>&nbsp;</div>`; continue; }
+    let v="—";
+    const em=/^([A-Za-z_$][\w$]*)\s*\.\s*get(Position|Power)\s*\(\s*\)$/.exec(t.expr);
+    if(em&&Sim.dev[em[1]]) v=Sim.dev[em[1]].cmd.toFixed(3);
+    else{
+      const ast=parseExpr(t.expr);
+      if(ast){ const n=evalNode(ast,env); if(isFinite(n)) v=n.toFixed(3); }
+    }
+    out+=`<div><span class="dsk">${esc(t.label)} :</span> <span class="dsv">${esc(v)}</span></div>`;
+  }
+  out+=`<div class="dshr">────────────────────────</div>`;
+  out+=`<div><span class="dsk">loop</span> <span class="dsv">${Sim.t.toFixed(1)} s @ 50 Hz</span></div>`;
+  if(Sim.drivetrain&&Sim.drivetrain.ok)
+    out+=`<div><span class="dsk">pose</span> <span class="dsv">x ${Sim.chassis.x.toFixed(2)} m   y ${Sim.chassis.y.toFixed(2)} m   ${(Sim.chassis.h*180/Math.PI).toFixed(0)}°</span></div>`;
+  const st=Object.keys(Sim.dev).filter(k=>Sim.dev[k].stalled);
+  out+= st.length
+    ? `<div><span class="dsk">bench</span> <span style="color:#E4574E">STALL on ${esc(st.join(", "))} — commanded position not reached</span></div>`
+    : `<div><span class="dsk">bench</span> <span class="dsv">all actuators tracking command</span></div>`;
+  return out;
+}
+
+/* ---------- tables ---------- */
+function renderTables(){
+  const mapT=$("#mapTable");
+  if(!CODE.devices.length){ mapT.innerHTML=`<tr><td class="meta">No devices found in this OpMode.</td></tr>`; }
+  else mapT.innerHTML=`<tr><th>device</th><th>mechanism</th><th>role</th><th>N·m</th><th>lever</th></tr>`+
+    CODE.devices.map(d=>{
+      const opts=[`<option value="">— none —</option>`].concat(
+        CAD.mechs.map(m=>`<option value="${esc(m.id)}"${MAP[d.name]===m.id?" selected":""}>${esc(mlabel(m))}</option>`)).join("");
+      const mech=CAD.mechs.filter(m=>m.id===MAP[d.name])[0]||null;
+      const spec=specFor(d,mech,OPTS.trust);
+      const roles=["Torque","Speed","Servo","Motor","CR"];
+      const ropts=roles.map(r=>`<option value="${r}"${spec.role===r?" selected":""}>${r}</option>`).join("");
+      const lever = mech&&mech.kind!=="fixed"&&mech.kind!=="effector"
+        ? `<input class="mini" type="number" step="1" min="0" data-lever="${esc(d.name)}" value="${(leverOf(mech)*1000).toFixed(0)}" aria-label="Lever length for ${esc(d.name)} in mm">`
+        : `<span style="color:var(--tx-3)">—</span>`;
+      return `<tr><td class="mono" title="${esc(d.type+"  ·  "+(d.cfg?'"'+d.cfg+'"':"no config")+"  ·  "+spec.fam+"  ·  from "+spec.src)}">${esc(d.name)}</td>
+        <td><select data-dev="${esc(d.name)}" aria-label="Mechanism for ${esc(d.name)}">${opts}</select></td>
+        <td><select data-role="${esc(d.name)}" aria-label="Actuator role for ${esc(d.name)}">${ropts}</select></td>
+        <td><input class="mini" type="number" step="0.05" min="0" data-nm="${esc(d.name)}"
+             value="${(spec.stallNm||0).toFixed(2)}" aria-label="Stall torque for ${esc(d.name)}"></td>
+        <td>${lever}</td></tr>`;
+    }).join("");
+  mapT.querySelectorAll("[data-role]").forEach(s=>s.addEventListener("change",()=>{
+    const n=s.dataset.role;
+    HW_USER[n]=Object.assign({},HW_USER[n],{role:s.value,
+      kind:(s.value==="Motor"?"motor":s.value==="CR"?"crservo":"servo")});
+    rebuild(); saveRig(); }));
+  mapT.querySelectorAll("[data-nm]").forEach(i=>i.addEventListener("change",()=>{
+    const v=parseFloat(i.value); const n=i.dataset.nm;
+    HW_USER[n]=Object.assign({},HW_USER[n],{stallNm:(isFinite(v)&&v>0)?v:undefined});
+    rebuild(); saveRig(); }));
+  mapT.querySelectorAll("select").forEach(sel=>sel.addEventListener("change",()=>{
+    MAP[sel.dataset.dev]=sel.value||null; rebuild(); saveRig(); }));
+  mapT.querySelectorAll("[data-lever]").forEach(inp=>inp.addEventListener("change",()=>{
+    const mech=CAD.mechs.filter(m=>m.id===MAP[inp.dataset.lever])[0];
+    if(mech){ const v=parseFloat(inp.value);
+      mech.leverOverride = (isFinite(v)&&v>0)? v/1000 : null; mech.inferred=false; rebuild(); saveRig(); }
+  }));
+  $("#mapPill").textContent=CODE.devices.length+" device"+(CODE.devices.length===1?"":"s");
+
+  const tt=$("#treeTable");
+  const srt=CAD.parts.slice().sort((a,b)=>{
+    const r=(x)=>x.kind==="servo"||x.kind==="motor"?0:1;
+    return r(a)-r(b) || a.name.localeCompare(b.name); });
+  tt.innerHTML=`<tr><th>part</th><th style="text-align:right">qty</th><th>id</th></tr>`+
+    srt.map(p=>`<tr><td>${esc(p.name)}${(p.kind==="servo"||p.kind==="motor")?' <span class="tag mut">'+p.kind+'</span>':""}</td>
+      <td class="num" style="color:var(--tx-3)">${p.n}</td>
+      <td class="mono" style="color:var(--tx-3);font-size:10.5px">${esc(p.part||"")}</td></tr>`).join("");
+  $("#partPill").textContent=CAD.parts.reduce((s,p)=>s+p.n,0)+" occurrences";
+}
+
+/* ============================================================
+   THE RIG DOCUMENT
+   Detection only seeds this. Once written down it is the model
+   everything runs on, it survives reloads, and it can be pasted
+   into a repo so next season starts from last season's rig
+   instead of from whatever the CAD happened to be guessable.
+   ============================================================ */
+let HW_USER={};            // per-device spec overrides
+function rigKey(){ return "ftcbench.rig."+((CAD&&CAD.name)||"sample"); }
+function exportRig(){
+  return {
+    format:"ftc-sim-bench.rig", version:1,
+    cad:(CAD&&CAD.name)||null, opmode:(CODE&&CODE.opmode)||null,
+    trust:OPTS.trust, payloadKg:OPTS.payloadKg, duty:OPTS.duty, turretScale:View.turretScale,
+    joints:(CAD?CAD.mechs:[]).map(m=>({
+      id:m.id, label:m.label||m.id, kind:m.kind, parent:m.parent, dir:m.dir||1,
+      pivotMm:m.pivot?m.pivot.map(v=>+(v*1000).toFixed(1)):null,
+      axis:m.axis?m.axis.map(v=>+v.toFixed(4)):null,
+      leverMm:m.leverOverride!=null?+(m.leverOverride*1000).toFixed(1):null,
+      part:m.part||null, manual:!!m.manual, inferred:!!m.inferred })),
+    devices:MAP, hardware:HW_USER, ignored:Object.keys(IGNORED)
+  };
+}
+function applyRig(r){
+  if(!r||!CAD) return false;
+  if(r.trust) OPTS.trust=r.trust;
+  if(typeof r.payloadKg==="number") OPTS.payloadKg=r.payloadKg;
+  if(typeof r.duty==="number") OPTS.duty=r.duty;
+  if(typeof r.turretScale==="number") View.turretScale=r.turretScale;
+  const byId={}; CAD.mechs.forEach(m=>byId[m.id]=m);
+  for(const j of (r.joints||[])){
+    let m=byId[j.id];
+    if(!m){
+      if(!j.manual && !j.pivotMm) continue;      // a joint from a CAD we no longer have
+      m={id:j.id, cluster:[], part:j.part||null, partName:null, hasActuator:false};
+      CAD.mechs.push(m); byId[j.id]=m;
+    }
+    m.label=j.label||m.label||m.id;
+    if(j.kind) m.kind=j.kind;
+    if(j.parent) m.parent=j.parent;
+    m.dir=j.dir||1;
+    if(j.pivotMm) m.pivot=j.pivotMm.map(v=>v/1000);
+    if(j.axis) m.axis=j.axis;
+    m.leverOverride = (j.leverMm!=null)? j.leverMm/1000 : null;
+    m.manual=!!j.manual;
+    m.inferred=!!j.inferred;
+  }
+  if(r.devices) MAP=Object.assign({},MAP,r.devices);
+  HW_USER=r.hardware||{};
+  if(r.ignored){ IGNORED={}; r.ignored.forEach(k=>IGNORED[k]=1); }
+  recomputeChain(CAD.mechs);
+  return true;
+}
+function saveRig(){
+  try{ localStorage.setItem(rigKey(),JSON.stringify(exportRig())); }catch(e){}
+  const ta=$("#rigJson"); if(ta&&document.activeElement!==ta) ta.value=JSON.stringify(exportRig(),null,1);
+}
+function loadSavedRig(){
+  try{ const s=localStorage.getItem(rigKey()); if(!s) return false; return applyRig(JSON.parse(s)); }
+  catch(e){ return false; }
+}
+/* Any part occurrence in the assembly can host a joint, so a mechanism the
+   detector never grouped is still one dropdown away. */
+function rigSpots(){
+  if(!CAD||!CAD.placements) return [];
+  const out=[], seen={};
+  for(const p of CAD.placements){
+    if(!p.child||!p.loc||!p.loc.some(v=>v!==0)) continue;
+    const key=p.child+"|"+p.loc.map(v=>v.toFixed(3)).join(",");
+    if(seen[key]) continue; seen[key]=1;
+    out.push({name:p.child, loc:p.loc, axis:p.axis});
+    if(out.length>=400) break;
+  }
+  out.sort((a,b)=>a.name.localeCompare(b.name));
+  return out;
+}
+function addManualJoint(){
+  if(!CAD) return;
+  const c=[0,1,2].map(i=>(CAD.bbox.min[i]+CAD.bbox.max[i])/2);
+  let n=1; while(CAD.mechs.some(m=>m.id==="joint "+n)) n++;
+  CAD.mechs.push({id:"joint "+n, label:"joint "+n, kind:"fixed", parent:"chassis", dir:1,
+    axis:[0,0,1], pivot:c, cluster:[], part:null, partName:null,
+    hasActuator:false, manual:true, inferred:false, leverOverride:null});
+  rigChanged();
+}
+
+/* ---------- kinematics: every inference, editable ---------- */
+function renderRig(){
+  const M=CAD.mechs;
+  const t=$("#rigTable");
+  if(!M.length){ t.innerHTML=`<tr><td class="meta">No mechanisms found in this CAD.</td></tr>`;
+    $("#rigChain").innerHTML=""; $("#rigPill").textContent="none"; return; }
+  const spots=rigSpots();
+  const spotOpts=spots.map((s,i)=>
+    `<option value="${i}">${esc(s.name.slice(0,30))} (${s.loc.map(v=>(v*1000).toFixed(0)).join(",")})</option>`).join("");
+  RIG_SPOTS=spots;
+  t.innerHTML=`<tr><th>name</th><th>joint</th><th>moves with</th><th>pivot at</th><th>dir</th><th></th></tr>`+
+    M.map(m=>{
+      const kopts=Object.keys(JOINT_KINDS).map(k=>
+        `<option value="${k}"${m.kind===k?" selected":""}>${JOINT_KINDS[k].label}</option>`).join("");
+      const popts=[`<option value="chassis"${m.parent==="chassis"?" selected":""}>chassis (frame)</option>`]
+        .concat(M.filter(x=>x.id!==m.id).map(x=>
+          `<option value="${esc(x.id)}"${m.parent===x.id?" selected":""}>${esc(mlabel(x))}</option>`)).join("");
+      const dot=m.inferred?`<span class="guess" title="inferred — confirm or change it"></span>`
+                          :`<span class="guess set" title="you set this"></span>`;
+      return `<tr class="${m.manual?"manual":""}">
+        <td><input class="rigname" data-rigname="${esc(m.id)}" value="${esc(mlabel(m))}" aria-label="Name for ${esc(m.id)}">${dot}</td>
+        <td><select data-rigkind="${esc(m.id)}" aria-label="Joint type for ${esc(mlabel(m))}">${kopts}</select></td>
+        <td><select data-rigparent="${esc(m.id)}" aria-label="What ${esc(mlabel(m))} moves with">${popts}</select></td>
+        <td><select data-rigspot="${esc(m.id)}" aria-label="Pivot location for ${esc(mlabel(m))}">
+              <option value="">as measured (${m.pivot?m.pivot.map(v=>(v*1000).toFixed(0)).join(","):"—"})</option>${spotOpts}</select></td>
+        <td><button class="dirbtn" data-rigdir="${esc(m.id)}" title="Flip which way this joint travels">${m.dir>0?"+":"−"}</button></td>
+        <td>${m.manual?`<button class="rmbtn" data-rigrm="${esc(m.id)}" title="Remove this joint">×</button>`:""}</td>
+      </tr>`;
+    }).join("");
+
+  $("#rigChain").innerHTML=M.map(m=>{
+    const carries=rigCarries(M,m.id);
+    const dev=deviceOn(m.id);
+    const par=m.parent==="chassis"?"the frame":mlabel(M.filter(x=>x.id===m.parent)[0]||{id:m.parent});
+    return `<div class="chainrow">
+      <span class="cn">${esc(mlabel(m))}</span> <span class="cj">${JOINT_KINDS[m.kind].label}</span>
+      ${dev?` <code>${esc(dev)}</code>`:` <span class="cj">no device</span>`}
+      <div class="cc">mounted on ${esc(par)} &mdash; ${carries.length
+        ? "swings <b>"+carries.map(c=>esc(mlabel(M.filter(x=>x.id===c)[0]||{id:c}))).join("</b>, <b>")+"</b> with it"
+        : "carries nothing further"}</div></div>`;
+  }).join("");
+  $("#rigPill").textContent=M.length+" joint"+(M.length===1?"":"s");
+
+  t.querySelectorAll("[data-rigkind]").forEach(s=>s.addEventListener("change",()=>{
+    const m=byMech(s.dataset.rigkind); if(!m) return;
+    m.kind=s.value; m.inferred=false; rigChanged(); }));
+  t.querySelectorAll("[data-rigparent]").forEach(s=>s.addEventListener("change",()=>{
+    const m=byMech(s.dataset.rigparent); if(!m) return;
+    m.parent=s.value; m.inferred=false; rigChanged(); }));
+  t.querySelectorAll("[data-rigdir]").forEach(b=>b.addEventListener("click",()=>{
+    const m=byMech(b.dataset.rigdir); if(!m) return;
+    m.dir=(m.dir>0?-1:1); m.inferred=false; renderRig(); }));
+  t.querySelectorAll("[data-rigname]").forEach(i=>i.addEventListener("change",()=>{
+    const m=byMech(i.dataset.rigname); if(!m) return;
+    m.label=i.value.trim()||m.id; m.inferred=false; rigChanged(); }));
+  t.querySelectorAll("[data-rigspot]").forEach(s=>s.addEventListener("change",()=>{
+    const m=byMech(s.dataset.rigspot); if(!m||s.value==="") return;
+    const sp=RIG_SPOTS[+s.value]; if(!sp) return;
+    m.pivot=sp.loc.slice(); m.axis=sp.axis?sp.axis.slice():m.axis; m.inferred=false;
+    rigChanged(); }));
+  t.querySelectorAll("[data-rigrm]").forEach(b=>b.addEventListener("click",()=>{
+    const id=b.dataset.rigrm;
+    CAD.mechs=CAD.mechs.filter(x=>x.id!==id);
+    CAD.mechs.forEach(x=>{ if(x.parent===id) x.parent="chassis"; });
+    for(const k in MAP) if(MAP[k]===id) MAP[k]=null;
+    rigChanged(); }));
+
+  const guessed=M.filter(m=>m.inferred).length;
+  const gp=$("#guessPill");
+  gp.textContent = guessed? guessed+" guessed" : "all confirmed";
+  gp.className = "pill"+(guessed?" warnp":" live");
+}
+let RIG_SPOTS=[];
+const byMech = id => CAD? CAD.mechs.filter(m=>m.id===id)[0]||null : null;
+function rigChanged(){
+  recomputeChain(CAD.mechs);
+  View.load(CAD);
+  rebuild();
+  saveRig();
+}
+
+/* ---------- findings, with ignore ---------- */
+function renderFindings(){
+  const live=FINDINGS.filter(f=>!IGNORED[f.key]);
+  const hidden=FINDINGS.filter(f=>IGNORED[f.key]);
+  const cnt={fail:0,warn:0,pass:0,info:0};
+  live.forEach(f=>cnt[f.sev]++);
+  $("#score").innerHTML=
+    `<div class="s-fail"><div class="k">${cnt.fail}</div><div class="l">won't work</div></div>
+     <div class="s-warn"><div class="k">${cnt.warn}</div><div class="l">risky</div></div>
+     <div class="s-pass"><div class="k">${cnt.pass}</div><div class="l">checks out</div></div>`;
+  const p=$("#verdictPill");
+  p.textContent = cnt.fail? cnt.fail+" blocking" : (cnt.warn? "runs with risk":"clear");
+  const col = cnt.fail? "var(--fail)" : (cnt.warn?"var(--warn)":"var(--pass)");
+  p.style.color=col; p.style.borderColor=col;
+
+  const SEVL={fail:"WON'T WORK",warn:"RISKY",pass:"OK",info:"NOTE"};
+  $("#findings").innerHTML= live.length? live.map(f=>
+    `<div class="finding ${f.sev}">
+      <div class="fhead"><span class="fsev">${SEVL[f.sev]}</span><span class="ftitle">${f.title}</span>
+        <button class="fignore" data-ig="${esc(f.key)}" title="Hide this finding — it stays hidden next time too">Ignore</button></div>
+      <div class="fbody">${f.body}</div>
+      ${f.math?`<div class="fmath">${esc(f.math)}</div>`:""}
+      ${f.fix?`<div class="ffix"><b>Fix</b>${f.fix}</div>`:""}
+    </div>`).join("")
+    : `<p class="meta" style="padding:14px 13px">Nothing to report${hidden.length?" — "+hidden.length+" finding"+(hidden.length>1?"s":"")+" ignored":""}.</p>`;
+
+  $("#ignoredWrap").innerHTML = hidden.length
+    ? `<div class="ignored-head"><h3>Ignored · ${hidden.length}</h3><span class="spacer" style="margin-left:auto"></span>
+         <button id="clearIgnored" style="padding:2px 8px;font-size:11px">Restore all</button></div>`+
+      hidden.map(f=>`<div class="ign-row"><span class="t">${f.title.replace(/<[^>]+>/g,"")}</span>
+         <button data-unig="${esc(f.key)}" style="padding:2px 8px;font-size:11px">Restore</button></div>`).join("")
+    : "";
+
+  document.querySelectorAll("[data-ig]").forEach(b=>b.addEventListener("click",()=>{
+    IGNORED[b.dataset.ig]=1; saveIgnored(); renderFindings(); }));
+  document.querySelectorAll("[data-unig]").forEach(b=>b.addEventListener("click",()=>{
+    delete IGNORED[b.dataset.unig]; saveIgnored(); renderFindings(); }));
+  const ci=$("#clearIgnored");
+  if(ci) ci.addEventListener("click",()=>{ IGNORED={}; saveIgnored(); renderFindings(); });
+}
+
+/* ---------- orchestration ---------- */
+function rebuild(){
+  FINDINGS=analyze(CODE,CAD,MAP,OPTS);
+  renderFindings(); renderTables(); renderRig();
+  Sim.reset(CODE,CAD,MAP,OPTS);
+  buildGauges(); renderPad();
+  const COL={"revolute-yaw":"#E0A42E","revolute-lift":"#4D9FFF","effector":"#3FB68B",
+             "linear":"#8C9EFF","fixed":"#8899AA"};
+  $("#vpLegend").innerHTML=
+    `<span><i style="background:#8093A8"></i>frame · fixed</span>`+
+    CAD.mechs.map(m=>{
+      const n=rigCarries(CAD.mechs,m.id).length;
+      return `<span><i style="background:${COL[m.kind]||"#8899AA"}"></i>${esc(mlabel(m))} · ${JOINT_KINDS[m.kind].label}${n?" +"+n:""}</span>`;
+    }).join("")+
+    (Sim.drivetrain&&Sim.drivetrain.ok?`<span><i style="background:#C3CEDB"></i>drive base · ${Sim.drivetrain.style}</span>`:"");
+}
+function loadCode(src,label){
+  $("#srcbox").value=src;
+  try{ CODE=parseJava(src); }
+  catch(e){ $("#codeStatus").textContent="couldn't parse: "+e.message;
+            $("#codeDrop").classList.remove("ok"); $("#codeDrop").classList.add("bad"); return; }
+  $("#codeDrop").classList.remove("bad"); $("#codeDrop").classList.add("ok");
+  $("#codeStatus").textContent=label+(CODE.opmode?'  ·  "'+CODE.opmode+'"':"");
+  MAP=autoMap(CODE.devices,CAD.mechs);
+  rebuild();
+}
+function loadCAD(cad,label,cls){
+  CAD=cad;
+  $("#cadStatus").textContent=label;
+  $("#cadDrop").className="drop "+(cls||"ok");
+  $("#vpTitle").textContent=(cad.name||label)+"  ·  "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s");
+  const b=cad.bbox, mm=v=>(v*1000).toFixed(0);
+  $("#vpDims").textContent=`${mm(b.max[0]-b.min[0])} × ${mm(b.max[1]-b.min[1])} × ${mm(b.max[2]-b.min[2])} mm`;
+  $("#geoPill").textContent=(cad.points?cad.points.length.toLocaleString():"0")+" pts";
+  $("#unitPill").textContent=cad.units==="METRE"?"m → mm":"mm";
+  if(CODE) MAP=autoMap(CODE.devices,CAD.mechs);
+  const restored=loadSavedRig();          // your edits for this CAD come back
+  View.load(cad);
+  if(CODE) rebuild();
+  if(restored) $("#cadStatus").textContent=label+"  ·  rig restored";
+}
+
+/* ---------- intake ---------- */
+function wireDrop(dropEl,inputEl,handler){
+  const open=()=>inputEl.click();
+  dropEl.addEventListener("click",e=>{ if(e.target!==inputEl) open(); });
+  dropEl.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();open();} });
+  ["dragenter","dragover"].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.add("armed");}));
+  ["dragleave","drop"].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.remove("armed");}));
+  dropEl.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) handler(f); });
+  inputEl.addEventListener("change",e=>{ const f=e.target.files[0]; if(f) handler(f); inputEl.value=""; });
+}
+function takeCAD(file){
+  $("#cadStatus").textContent="reading "+file.name+" …";
+  const r=new FileReader();
+  r.onerror=()=>{ $("#cadStatus").textContent="couldn't read "+file.name; };
+  r.onload=()=>{
+    const mb=(r.result.length/1048576).toFixed(1);
+    $("#cadStatus").textContent="parsing "+mb+" MB …";
+    setTimeout(()=>{
+      try{
+        const cad=parseSTEP(r.result,msg=>{$("#cadStatus").textContent=msg;});
+        cad.name=file.name;
+        if(!cad.mechs.length)
+          loadCAD(cad, file.name+" — geometry loaded, no actuators recognized", "bad");
+        else
+          loadCAD(cad, file.name+"  ·  "+mb+" MB  ·  "+cad.mechs.length+" mechanisms", "ok");
+      }catch(err){
+        $("#cadStatus").textContent="couldn't parse this STEP — "+err.message;
+        $("#cadDrop").className="drop bad";
+      }
+    },30);
+  };
+  r.readAsText(file);
+}
+function takeCode(file){
+  const r=new FileReader();
+  r.onerror=()=>{ $("#codeStatus").textContent="couldn't read "+file.name; };
+  r.onload=()=>loadCode(r.result,file.name);
+  r.readAsText(file);
+}
+
+/* ---------- keyboard ---------- */
+/* A/B/X/Y stay on the face buttons, so the sticks take the IJKL cluster
+   rather than WASD — otherwise A would mean two things at once. */
+const KEYMAP={KeyA:"a",KeyB:"b",KeyX:"x",KeyY:"y",KeyQ:"left_bumper",KeyE:"right_bumper",
+  ArrowUp:"dpad_up",ArrowDown:"dpad_down",ArrowLeft:"dpad_left",ArrowRight:"dpad_right"};
+const STICKKEYS={KeyI:["left_stick_y",-1],KeyK:["left_stick_y",1],
+                 KeyJ:["left_stick_x",-1],KeyL:["left_stick_x",1],
+                 KeyU:["right_stick_x",-1],KeyO:["right_stick_x",1]};
+const typing=e=>{ const t=e.target.tagName;
+  return t==="TEXTAREA"||t==="INPUT"||t==="SELECT"||(e.target.dataset&&e.target.dataset.stick); };
+function knobTo(pad,axis,v){
+  for(const k of STICKS){
+    if(k.ax!==axis&&k.ay!==axis) continue;
+    const knob=document.querySelector(`[data-knob="${k.id}"]`); if(!knob) continue;
+    const max=k.r-7;
+    if(k.ax===axis) knob.setAttribute("cx",k.cx+v*max);
+    else knob.setAttribute("cy",k.cy+v*max);
+  }
+}
+addEventListener("keydown",e=>{
+  if(typing(e)) return;
+  const sk=STICKKEYS[e.code];
+  if(sk){ e.preventDefault(); Sim.pad[activePad][sk[0]]=sk[1]; knobTo(activePad,sk[0],sk[1]); return; }
+  const b=KEYMAP[e.code]; if(!b) return;
+  e.preventDefault(); Sim.pad[activePad][b]=true;
+  const el=document.querySelector(`[data-btn="${b}"]`); if(el) el.classList.add("down");
+});
+addEventListener("keyup",e=>{
+  if(typing(e)) return;
+  const sk=STICKKEYS[e.code];
+  if(sk){ Sim.pad[activePad][sk[0]]=0; knobTo(activePad,sk[0],0); return; }
+  const b=KEYMAP[e.code]; if(!b) return;
+  Sim.pad[activePad][b]=false;
+  const el=document.querySelector(`[data-btn="${b}"]`); if(el) el.classList.remove("down");
+});
+
+/* ---------- real USB pad ---------- */
+const HW_ORDER=["a","b","x","y","left_bumper","right_bumper","left_trigger","right_trigger",
+  "back","start","left_stick_button","right_stick_button","dpad_up","dpad_down","dpad_left","dpad_right"];
+let hwWas=null;
+function pollHW(){
+  const gps=navigator.getGamepads?navigator.getGamepads():[];
+  let live=false;
+  for(let i=0;i<gps.length&&i<2;i++){
+    const g=gps[i]; if(!g) continue; live=true;
+    const pad=i+1;
+    g.buttons.forEach((b,j)=>{ const n=HW_ORDER[j]; if(!n) return;
+      Sim.pad[pad][n]=b.pressed;
+      if(pad===activePad){ const el=document.querySelector(`[data-btn="${n}"]`);
+        if(el) el.classList.toggle("down",b.pressed); } });
+    const dz=v=>Math.abs(v)<0.08?0:v;
+    if(g.axes.length>=4){
+      Sim.pad[pad].left_stick_x=dz(g.axes[0]); Sim.pad[pad].left_stick_y=dz(g.axes[1]);
+      Sim.pad[pad].right_stick_x=dz(g.axes[2]); Sim.pad[pad].right_stick_y=dz(g.axes[3]);
+    }
+  }
+  if(live!==hwWas){ hwWas=live;
+    const p=$("#hwPad"); p.textContent=live?"USB pad live":"no USB pad"; p.className="pill"+(live?" live":""); }
+}
+
+/* ---------- main loop ---------- */
+let last=performance.now(), acc=0, slowAcc=0;
+function frame(now){
+  const dt=Math.min(0.1,(now-last)/1000); last=now;
+  pollHW();
+  acc+=dt;
+  let guard=0;
+  while(acc>=0.02 && guard++<8){ Sim.tick(0.02); acc-=0.02; }
+  if(acc>0.5) acc=0;
+  updateGauges();
+  View.update();
+  slowAcc+=dt;
+  if(slowAcc>=0.05){ slowAcc=0;
+    $("#mech").innerHTML=renderMech();
+    $("#dsPanel").innerHTML=renderDS();
+    const anyDown=Object.keys(Sim.pad[activePad]).some(k=>Sim.pad[activePad][k]);
+    $("#tickPill").textContent=anyDown?"commanding":"holding";
+    document.querySelectorAll(".bindrow").forEach(r=>{
+      const k=r.dataset.btn; r.classList.toggle("active",!!Sim.pad[activePad][k]); });
+  }
+  View.render();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- boot ---------- */
+(function boot(){
+  View.init($("#viewport"));
+  const sample=JSON.parse(JSON.stringify(SAMPLE_CAD));
+  sample.points=synthGeometry();
+  classifyMechs(sample.mechs);
+  loadCAD(sample,"sample: fulll.step (measured)","ok");
+  loadCode(SAMPLE_JAVA,"WORKSHOPCODE.java");
+
+  wireDrop($("#cadDrop"),$("#cadFile"),takeCAD);
+  wireDrop($("#codeDrop"),$("#codeFile"),takeCode);
+  $("#reparse").addEventListener("click",()=>loadCode($("#srcbox").value,"pasted source"));
+  $("#resetSample").addEventListener("click",()=>loadCode(SAMPLE_JAVA,"WORKSHOPCODE.java"));
+  $("#loadDrive").addEventListener("click",()=>loadCode(DRIVE_JAVA,"MecanumTeleOp.java"));
+  $("#viewSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    [].forEach.call($("#viewSeg").children,x=>x.classList.toggle("on",x===b));
+    View.setView(b.dataset.v); });
+  $("#padSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    activePad=+b.dataset.pad;
+    [].forEach.call($("#padSeg").children,x=>x.classList.toggle("on",x===b));
+    renderPad(); });
+  $("#trustSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    OPTS.trust=b.dataset.trust;
+    [].forEach.call($("#trustSeg").children,x=>x.classList.toggle("on",x===b));
+    $("#trustNote").textContent = OPTS.trust==="code"
+      ? "Servo/motor type comes from your declarations and comments. The CAD is used for geometry only."
+      : "Servo/motor type comes from the part numbers in the STEP assembly.";
+    rebuild(); saveRig(); });
+  $("#turretSlider").addEventListener("input",e=>{
+    View.turretScale=+e.target.value/100; $("#turretVal").textContent=e.target.value+" %";
+    View.load(CAD); });
+  $("#addJoint").addEventListener("click",addManualJoint);
+  $("#rigCopy").addEventListener("click",()=>{
+    const txt=JSON.stringify(exportRig(),null,1);
+    $("#rigJson").value=txt;
+    const done=ok=>{ const b=$("#rigCopy"); b.textContent=ok?"Copied":"Select & copy";
+      setTimeout(()=>{b.textContent="Copy";},1400); };
+    if(navigator.clipboard&&navigator.clipboard.writeText)
+      navigator.clipboard.writeText(txt).then(()=>done(true),()=>{ $("#rigJson").select(); done(false); });
+    else { $("#rigJson").select(); done(false); }
+  });
+  $("#rigApply").addEventListener("click",()=>{
+    try{
+      const r=JSON.parse($("#rigJson").value);
+      if(r.format!=="ftc-sim-bench.rig") throw new Error("not a rig document");
+      applyRig(r); View.load(CAD); rebuild(); saveRig();
+      $("#rigApply").textContent="Applied"; setTimeout(()=>{$("#rigApply").textContent="Apply";},1400);
+    }catch(err){
+      $("#rigApply").textContent="Bad JSON"; setTimeout(()=>{$("#rigApply").textContent="Apply";},1800);
+    }
+  });
+  $("#rigReset").addEventListener("click",()=>{
+    try{ localStorage.removeItem(rigKey()); }catch(e){}
+    HW_USER={};
+    for(const m of CAD.mechs){ m.kind=m.hasActuator?null:"fixed"; m.leverOverride=null; m.label=null; }
+    CAD.mechs=CAD.mechs.filter(m=>!m.manual);
+    classifyMechs(CAD.mechs);
+    if(CODE) MAP=autoMap(CODE.devices,CAD.mechs);
+    rigChanged();
+  });
+  $("#massSlider").addEventListener("input",e=>{
+    OPTS.payloadKg=+e.target.value/1000; $("#massVal").textContent=e.target.value+" g";
+    FINDINGS=analyze(CODE,CAD,MAP,OPTS); renderFindings(); Sim.opts=OPTS; saveRig(); });
+  $("#dutySlider").addEventListener("input",e=>{
+    OPTS.duty=+e.target.value/100; $("#dutyVal").textContent=e.target.value+" %";
+    FINDINGS=analyze(CODE,CAD,MAP,OPTS); renderFindings(); Sim.opts=OPTS; saveRig(); });
+
+  requestAnimationFrame(frame);
+})();
+</script>

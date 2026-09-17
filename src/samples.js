@@ -1,0 +1,222 @@
+/* ============================================================
+   1.  SAMPLES
+   ============================================================ */
+const SAMPLE_JAVA = `package org.firstinspires.ftc.teamcode.pedroPathing;
+
+// ===== IMPORTS =====
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.Servo;
+
+
+@TeleOp(name = "Basic Claw Test")
+public class WORKSHOPCODE extends LinearOpMode {
+
+    // Speed servo that opens and closes the claw
+    Servo claw;
+
+    // Torque servo that moves the arm up and down
+    Servo arm;
+
+    // Torque servo that rotates the arm
+    Servo rotate;
+
+    static final double CLAW_OPEN = 0.20;
+    static final double CLAW_CLOSE = 0.50;
+
+    static final double ARM_DOWN = 0.20;
+    static final double ARM_UP = 0.40;
+
+    double rotatePosition = 0.50;
+    static final double ROTATE_STEP = 0.10;
+    static final double ROTATE_MIN = 0.10;
+    static final double ROTATE_MAX = 0.90;
+
+    boolean lastLeftBumper = false;
+    boolean lastRightBumper = false;
+
+    @Override
+    public void runOpMode() {
+
+        claw = hardwareMap.servo.get("claw");
+        arm = hardwareMap.servo.get("arm");
+        rotate = hardwareMap.servo.get("rotate");
+
+        claw.setPosition(CLAW_OPEN);
+        arm.setPosition(ARM_DOWN);
+        rotate.setPosition(rotatePosition);
+
+        waitForStart();
+
+        while (opModeIsActive()) {
+
+            // A = close claw
+            if (gamepad2.a) {
+                claw.setPosition(CLAW_CLOSE);
+            }
+
+            // B = open claw
+            if (gamepad2.b) {
+                claw.setPosition(CLAW_OPEN);
+            }
+
+            // X = move arm up
+            if (gamepad2.x) {
+                arm.setPosition(ARM_UP);
+            }
+
+            // Y = move arm down
+            if (gamepad2.y) {
+                arm.setPosition(ARM_DOWN);
+            }
+
+            if (gamepad2.right_bumper && !lastRightBumper) {
+                rotatePosition += ROTATE_STEP;
+                if (rotatePosition > ROTATE_MAX) {
+                    rotatePosition = ROTATE_MAX;
+                }
+                rotate.setPosition(rotatePosition);
+            }
+
+            if (gamepad2.left_bumper && !lastLeftBumper) {
+                rotatePosition -= ROTATE_STEP;
+                if (rotatePosition < ROTATE_MIN) {
+                    rotatePosition = ROTATE_MIN;
+                }
+                rotate.setPosition(rotatePosition);
+            }
+
+            lastRightBumper = gamepad2.right_bumper;
+            lastLeftBumper = gamepad2.left_bumper;
+
+            telemetry.addData("Claw Position", claw.getPosition());
+            telemetry.addData("Arm Position", arm.getPosition());
+            telemetry.addData("Rotate Position", rotatePosition);
+
+            telemetry.addLine("");
+            telemetry.addLine("A = Close Claw");
+            telemetry.addLine("B = Open Claw");
+            telemetry.addLine("X = Arm Up");
+            telemetry.addLine("Y = Arm Down");
+            telemetry.addLine("LB = Rotate Left");
+            telemetry.addLine("RB = Rotate Right");
+
+            telemetry.update();
+        }
+    }
+}`;
+
+const DRIVE_JAVA = `package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Servo;
+
+@TeleOp(name = "Mecanum Drive + Lift")
+public class MecanumTeleOp extends LinearOpMode {
+
+    // Yellow Jacket drive motors
+    DcMotor leftFront;
+    DcMotor rightFront;
+    DcMotor leftBack;
+    DcMotor rightBack;
+
+    // Torque servo on the lift
+    Servo lift;
+
+    static final double SPEED = 0.85;
+    static final double LIFT_DOWN = 0.15;
+    static final double LIFT_UP = 0.75;
+
+    @Override
+    public void runOpMode() {
+
+        leftFront = hardwareMap.get(DcMotor.class, "leftFront");
+        rightFront = hardwareMap.get(DcMotor.class, "rightFront");
+        leftBack = hardwareMap.get(DcMotor.class, "leftBack");
+        rightBack = hardwareMap.get(DcMotor.class, "rightBack");
+        lift = hardwareMap.get(Servo.class, "lift");
+
+        lift.setPosition(LIFT_DOWN);
+
+        waitForStart();
+
+        while (opModeIsActive()) {
+
+            double y = -gamepad1.left_stick_y;
+            double x = gamepad1.left_stick_x;
+            double turn = gamepad1.right_stick_x;
+
+            leftFront.setPower((y + x + turn) * SPEED);
+            leftBack.setPower((y - x + turn) * SPEED);
+            rightFront.setPower((y - x - turn) * SPEED);
+            rightBack.setPower((y + x - turn) * SPEED);
+
+            if (gamepad2.dpad_up) {
+                lift.setPosition(LIFT_UP);
+            }
+            if (gamepad2.dpad_down) {
+                lift.setPosition(LIFT_DOWN);
+            }
+
+            telemetry.addData("Left Front", leftFront.getPower());
+            telemetry.addData("Right Front", rightFront.getPower());
+            telemetry.addData("Lift", lift.getPosition());
+            telemetry.update();
+        }
+    }
+}`;
+
+/* Measured out of the user's fulll.step (AP242, metre units). */
+const SAMPLE_CAD = {
+  name:"fulll.step", units:"METRE", pointCount:127206,
+  bbox:{min:[-0.144,-0.115,-0.167], max:[0.270,0.375,0.238]},
+  parts:[
+    {name:"Arm",  part:"2000-0025-0002", n:1, kind:"servo"},
+    {name:"Base", part:"2000-0025-0002", n:1, kind:"servo"},
+    {name:"Claw", part:"2000-0025-0003", n:1, kind:"servo"},
+    {name:"Servo Mount", part:null, n:2, kind:"struct"},
+    {name:"1201-0043-0002 rev2", part:null, n:4, kind:"struct"},
+    {name:"1100-0010-0264 rev1", part:null, n:2, kind:"struct"},
+    {name:"1100-0009-0240 rev1", part:null, n:1, kind:"struct"},
+    {name:"1100-0008-0216 rev1", part:null, n:1, kind:"struct"},
+    {name:"1107-0011-0288 rev1", part:null, n:1, kind:"struct"},
+    {name:"1107-0005-0144 rev1", part:null, n:1, kind:"struct"},
+    {name:"1908-0025-0032 rev1", part:null, n:3, kind:"struct"},
+    {name:"Sonic Hub (8mm REX Bore)", part:null, n:1, kind:"struct"},
+    {name:"8mm REX flanged bearing", part:null, n:1, kind:"struct"},
+    {name:"2106-4008-0520 assembly", part:null, n:1, kind:"struct"},
+    {name:"2920-0001-4008 assembly", part:null, n:1, kind:"struct"},
+    {name:"1802-0043-0001", part:null, n:1, kind:"struct"}
+  ],
+  mechs:[
+    {id:"Arm",  part:"2000-0025-0002", partName:"2000 Series Servo", axis:[-0.72,0.70,0.00], pivot:[0.1323,0.2244,0.1958]},
+    {id:"Base", part:"2000-0025-0002", partName:"2000 Series Servo", axis:[0,0,1],           pivot:[0.1354,0.2310,-0.0522]},
+    {id:"Claw", part:"2000-0025-0003", partName:"2000 Series Servo", axis:[-0.47,-0.49,0.73],pivot:[0.0296,0.1461,0.0918]}
+  ]
+};
+
+function synthGeometry(){
+  const P=[]; const R=(a,b)=>a+Math.random()*(b-a);
+  const box=(c,s,n)=>{for(let i=0;i<n;i++){
+    const f=Math.floor(Math.random()*6), u=R(-.5,.5), v=R(-.5,.5);
+    const w=(f<2?0:f<4?1:2), sg=(f%2)?.5:-.5; const p=[0,0,0];
+    p[w]=sg; p[(w+1)%3]=u; p[(w+2)%3]=v;
+    P.push([c[0]+p[0]*s[0], c[1]+p[1]*s[1], c[2]+p[2]*s[2]]);}};
+  box([0.014,0.255,-0.026],[0.032,0.240,0.048],7000);
+  box([0.254,0.255,-0.026],[0.032,0.240,0.048],7000);
+  box([0.134,0.372,-0.026],[0.250,0.032,0.048],6000);
+  box([0.134,0.140,-0.026],[0.250,0.032,0.048],6000);
+  box([0.135,0.231,0.055],[0.042,0.042,0.210],8000);
+  box([0.135,0.231,-0.040],[0.056,0.056,0.050],3500);
+  box([0.132,0.224,0.196],[0.046,0.056,0.040],4500);
+  for(let i=0;i<10000;i++){ const t=Math.random();
+    P.push([0.132+(0.020-0.132)*t + R(-.010,.010), 0.224+(0.170-0.224)*t + R(-.010,.010),
+            0.196+(0.090-0.196)*t + R(-.008,.008)]); }
+  box([0.030,0.150,0.092],[0.040,0.048,0.036],4500);
+  box([0.016,0.181,0.084],[0.030,0.030,0.030],2400);
+  box([0.004,0.196,0.104],[0.014,0.056,0.012],2000);
+  box([0.030,0.200,0.112],[0.014,0.056,0.012],2000);
+  return P;
+}
