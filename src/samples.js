@@ -168,6 +168,79 @@ public class MecanumTeleOp extends LinearOpMode {
     }
 }`;
 
+const AUTO_JAVA = `package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.util.ElapsedTime;
+
+@Autonomous(name = "Timed Drive Auto", group = "samples")
+public class TimedDriveAuto extends LinearOpMode {
+
+    private ElapsedTime runtime = new ElapsedTime();
+
+    static final double DRIVE = 0.6;
+    static final double TURN = 0.5;
+
+    @Override
+    public void runOpMode() {
+        DcMotor leftFront = hardwareMap.get(DcMotor.class, "leftFront");
+        DcMotor rightFront = hardwareMap.get(DcMotor.class, "rightFront");
+        DcMotor leftBack = hardwareMap.get(DcMotor.class, "leftBack");
+        DcMotor rightBack = hardwareMap.get(DcMotor.class, "rightBack");
+        Servo lift = hardwareMap.get(Servo.class, "lift");
+
+        rightFront.setDirection(DcMotor.Direction.REVERSE);
+        rightBack.setDirection(DcMotor.Direction.REVERSE);
+        lift.setPosition(0.15);
+
+        telemetry.addData("Status", "Ready");
+        telemetry.update();
+
+        waitForStart();
+        runtime.reset();
+
+        // drive forward
+        leftFront.setPower(DRIVE);
+        rightFront.setPower(DRIVE);
+        leftBack.setPower(DRIVE);
+        rightBack.setPower(DRIVE);
+        sleep(1200);
+
+        // turn right in place
+        leftFront.setPower(TURN);
+        leftBack.setPower(TURN);
+        rightFront.setPower(-TURN);
+        rightBack.setPower(-TURN);
+        sleep(700);
+
+        // stop and raise the lift
+        leftFront.setPower(0);
+        rightFront.setPower(0);
+        leftBack.setPower(0);
+        rightBack.setPower(0);
+        lift.setPosition(0.75);
+        sleep(800);
+
+        // creep backwards until five seconds have passed
+        while (opModeIsActive() && runtime.seconds() < 5.0) {
+            leftFront.setPower(-0.3);
+            rightFront.setPower(-0.3);
+            leftBack.setPower(-0.3);
+            rightBack.setPower(-0.3);
+            telemetry.addData("Elapsed", runtime.seconds());
+            telemetry.update();
+        }
+
+        leftFront.setPower(0);
+        rightFront.setPower(0);
+        leftBack.setPower(0);
+        rightBack.setPower(0);
+    }
+}`;
+
 /* Measured out of the user's fulll.step (AP242, metre units). */
 const SAMPLE_CAD = {
   name:"fulll.step", units:"METRE", pointCount:127206,

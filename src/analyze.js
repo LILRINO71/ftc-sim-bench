@@ -11,10 +11,11 @@ function analyze(code,cad,map,opts){
   if(!code.kind) add("struct:anno","warn","No OpMode annotation",
     "Nothing marked <code>@TeleOp</code> or <code>@Autonomous</code>, so this class won't appear on the Driver Station list.",null,
     "Add <code>@TeleOp(name = \"…\")</code> above the class.");
-  if(!code.hasLoop) add("struct:loop","fail","No OpMode loop found",
-    "The bench couldn't find a <code>while (opModeIsActive())</code> block or a <code>loop()</code> method, so there is nothing to run.",null,
+  const hasAuto = code.auto && code.auto.length>0;
+  if(!code.hasLoop && !hasAuto) add("struct:loop","fail","Nothing to run after START",
+    "The bench couldn't find a <code>while (opModeIsActive())</code> loop, a <code>loop()</code> method, or any statements after <code>waitForStart()</code>.",null,
     "Check the class structure — everything below is based on whatever it could read.");
-  else if(!code.hasWait&&code.kind==="TeleOp") add("struct:wait","fail","Missing waitForStart()",
+  else if(!code.hasWait&&code.kind==="TeleOp"&&!/void\s+loop\s*\(/.test(code.src||"")) add("struct:wait","fail","Missing waitForStart()",
     "A LinearOpMode that never calls <code>waitForStart()</code> runs its loop during init and is stopped by the SDK.",null,
     "Call <code>waitForStart();</code> before the main loop.");
   if(!code.devices.length) add("struct:dev","warn","No hardware devices found",
@@ -126,7 +127,7 @@ headroom  ${ratio.toFixed(2)}×${ratio<1?"  ◄ SHORT":""}`;
     } else if(st.kind==="sleep") sleeps.push({ms:st.ms, on:ctx});
   }})(code.stmts,null);
   if(sleeps.length){
-    const total=sleeps.reduce((s,x)=>s+x.ms,0);
+    const total=sleeps.reduce((s,x)=>s+(x.ms||0),0);
     add("sleep","fail","<code>sleep()</code> inside the loop freezes the whole robot",
       "A LinearOpMode runs one thread. While <code>sleep("+sleeps[0].ms+")</code> is blocking, nothing else in the loop runs &mdash; "+
       "the drivetrain keeps its last power, no other button is read, and the PID loops stop updating. "+
@@ -235,9 +236,22 @@ headroom  ${ratio.toFixed(2)}×${ratio<1?"  ◄ SHORT":""}`;
   }
 
   const cfgs=code.devices.filter(d=>d.cfg).map(d=>'"'+d.cfg+'"');
-  if(cfgs.length) add("cfg","info","Config names still need checking by hand",
-    "This OpMode asks the Robot Controller for "+cfgs.join(", ")+". No CAD file can confirm those.",null,
-    "Open the config on the Driver Station and read the names back.");
+  if(opts.robotConfig) checkRobotConfig(code,opts.robotConfig).forEach(f=>F.push(f));
+  else if(cfgs.length) add("cfg","info","Config names aren't checked yet",
+    "This OpMode asks the Robot Controller for "+cfgs.join(", ")+". No CAD file can confirm those — but the robot's configuration file can.",null,
+    "Load the configuration <code>.xml</code> from the Robot Controller (the <code>FIRST</code> folder on the Control Hub) and every name is checked exactly.");
+
+  // ---- what the interpreter had to skip
+  const cov=coverage(code);
+  if(cov.skipped.length){
+    const byWhy={};
+    cov.skipped.forEach(s=>{ (byWhy[s.why]=byWhy[s.why]||[]).push(s); });
+    add("coverage","info",cov.skipped.length+" line"+(cov.skipped.length>1?"s":"")+" the bench can't simulate",
+      "It ran <b>"+cov.understood+" of "+cov.total+"</b> statements. The rest are skipped, not guessed at &mdash; if one of them moves the robot, the bench won't show it.",
+      cov.skipped.slice(0,12).map(s=>("line "+(s.line||"?")).padEnd(9)+String(s.text).slice(0,46).padEnd(48)+s.why).join("\n")+
+        (cov.skipped.length>12?"\n… and "+(cov.skipped.length-12)+" more":""),
+      null);
+  }
 
   const order={fail:0,warn:1,pass:2,info:3};
   F.sort((a,b)=>order[a.sev]-order[b.sev]);

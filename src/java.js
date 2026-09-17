@@ -17,47 +17,75 @@ function stripComments(s){
           .replace(/\/\/[^\n]*/g,m=>" ".repeat(m.length));
 }
 
-/* Split a block into an ordered statement list, recursing into if/else. */
-function parseStatements(src){
+/* Split a block into an ordered statement list, recursing into if/else.
+   `base` is this block's offset in the whole file, so every statement can
+   report its line. Anything the interpreter can't run becomes an "unknown"
+   node with a reason — surfaced to the user, never silently dropped. */
+function parseStatements(src, base, opts){
+  base=base||0; opts=opts||{};
   const out=[]; let i=0;
   while(i<src.length){
     while(i<src.length && /\s/.test(src[i])) i++;
     if(i>=src.length) break;
-    if(src[i]==="{"){ const r=matchBlock(src,i); out.push.apply(out,parseStatements(src.slice(r[0],r[1]))); i=r[1]+1; continue; }
-    const kw=/^(if|while|for|switch)\b/.exec(src.slice(i));
+    if(src[i]==="{"){ const r=matchBlock(src,i); out.push.apply(out,parseStatements(src.slice(r[0],r[1]),base+r[0],opts)); i=r[1]+1; continue; }
+    const kw=/^(if|while|for|switch|do)\b/.exec(src.slice(i));
     if(kw){
+      const at=base+i;
       const lp=src.indexOf("(",i);
-      if(lp<0){ break; }
+      if(lp<0||kw[1]==="do"){ out.push({kind:"unknown",at,text:src.slice(i,i+40).trim(),why:"do/while loops inside the OpMode aren't simulated"}); break; }
       let d=0,j=lp;
       for(;j<src.length;j++){ if(src[j]==="(")d++; else if(src[j]===")"){d--; if(!d)break;} }
       const cond=src.slice(lp+1,j);
       let k=j+1; while(k<src.length&&/\s/.test(src[k]))k++;
-      let bodySrc,end;
-      if(src[k]==="{"){ const r=matchBlock(src,k); bodySrc=src.slice(r[0],r[1]); end=r[1]+1; }
-      else { const sc=src.indexOf(";",k); if(sc<0) break; bodySrc=src.slice(k,sc+1); end=sc+1; }
-      if(kw[1]!=="if"){ i=end; continue; }                        // loops/switch: skip body
+      let bodySrc,bodyAt,end;
+      if(src[k]==="{"){ const r=matchBlock(src,k); bodySrc=src.slice(r[0],r[1]); bodyAt=base+r[0]; end=r[1]+1; }
+      else { const sc=src.indexOf(";",k); if(sc<0) break; bodySrc=src.slice(k,sc+1); bodyAt=base+k; end=sc+1; }
+      if(kw[1]!=="if"){
+        // in an autonomous sequence a while loop is a wait: run the body each
+        // tick until the condition goes false
+        if(opts.auto && kw[1]==="while"){
+          out.push({kind:"while", at, cond, condAst:parseExpr(cond), body:parseStatements(bodySrc,bodyAt)});
+          i=end; continue;
+        }
+        out.push({kind:"unknown",at,text:kw[1]+" ("+cond.trim().slice(0,48)+")",
+          why:kw[1]==="switch"?"switch statements aren't simulated":"loops inside the OpMode loop aren't simulated"});
+        i=end; continue;
+      }
+      // the sample autos wrap their whole sequence in `if (opModeIsActive())`
+      if(opts.auto && /^\s*opModeIsActive\s*\(\s*\)\s*$/.test(cond)){
+        out.push.apply(out,parseStatements(bodySrc,bodyAt,opts));
+        i=end; continue;
+      }
       let elseStmts=null, m2=end;
       while(m2<src.length&&/\s/.test(src[m2]))m2++;
       if(/^else\b/.test(src.slice(m2))){
         let k2=m2+4; while(k2<src.length&&/\s/.test(src[k2]))k2++;
-        if(src[k2]==="{"){ const r=matchBlock(src,k2); elseStmts=parseStatements(src.slice(r[0],r[1])); end=r[1]+1; }
+        if(src[k2]==="{"){ const r=matchBlock(src,k2); elseStmts=parseStatements(src.slice(r[0],r[1]),base+r[0]); end=r[1]+1; }
         else { // else if … / single statement
           const rest=src.slice(k2);
           const stop=/^if\b/.test(rest)? findStatementEnd(rest) : rest.indexOf(";")+1;
-          elseStmts=parseStatements(rest.slice(0,stop)); end=k2+stop;
+          elseStmts=parseStatements(rest.slice(0,stop),base+k2); end=k2+stop;
         }
       }
-      out.push({kind:"if", cond, condAst:parseExpr(cond), then:parseStatements(bodySrc), else:elseStmts});
+      // `if (isStopRequested()) return;` is a guard for the real robot, not behaviour
+      if(!/^\s*isStopRequested\s*\(\s*\)\s*$/.test(cond))
+        out.push({kind:"if", at, cond, condAst:parseExpr(cond), then:parseStatements(bodySrc,bodyAt), else:elseStmts});
       i=end; continue;
     }
     const sc=src.indexOf(";",i);
     if(sc<0) break;
-    const st=classifyStatement(src.slice(i,sc).trim());
-    if(st) out.push(st);
+    const text=src.slice(i,sc).trim();
+    const st=classifyStatement(text);
+    if(st){ st.at=base+i; out.push(st); }
     i=sc+1;
   }
   return out;
 }
+
+/* Calls the simulator acts on, and calls that are safe to ignore. Anything
+   else on a non-device object is reported as not simulated. */
+const SIM_METHODS = /^(setDirection|setMode|setTargetPosition|setPID|setPIDF|setP|setI|setD|reset|resetYaw)$/;
+const NOOP_METHODS = /^(initialize|clear|clearAll|addData|addLine|setMsTransmissionInterval|setAutoClear|setZeroPowerBehavior|setCaption|speak|log|getInstance|getTelemetry|close|setPwmEnable|setPwmDisable)$/;
 function findStatementEnd(rest){
   const lp=rest.indexOf("(");
   let d=0,j=lp;
@@ -82,24 +110,101 @@ function classifyStatement(s){
   if((m=/^([A-Za-z_$][\w$]*)\s*\.\s*(setPosition|setPower|setVelocity)\s*\(([\s\S]*)\)$/.exec(s)))
     return {kind:"call", dev:m[1], op:m[2], expr:m[3].trim(), ast:parseExpr(m[3])};
   if(/^telemetry\s*\./.test(s)) return null;
-  // a blocking wait inside the loop — the bench flags it and skips it
-  if((m=/^sleep\s*\(\s*(\d+)\s*\)$/.exec(s))) return {kind:"sleep", ms:+m[1]};
-  // controller = new PIDController(p, i, d)
-  if((m=/^([A-Za-z_$][\w$]*)\s*=\s*new\s+\w*PID\w*\s*\(([\s\S]*)\)$/.exec(s)))
+  if(/^(idle|waitForStart|telemetry\.update)\s*\(\s*\)$/.test(s)) return null;
+  if(/^(return|break|continue)\b/.test(s))
+    return {kind:"unknown", text:s, why:"control flow ("+s.split(/\W/)[0]+") isn't simulated"};
+  // count++  count--  ++count  --count
+  if((m=/^(\+\+|--)\s*([A-Za-z_$][\w$]*)$/.exec(s))||(m=/^([A-Za-z_$][\w$]*)\s*(\+\+|--)$/.exec(s))){
+    const pre=m[1]==="++"||m[1]==="--";
+    const name=pre?m[2]:m[1], inc=(pre?m[1]:m[2])==="++";
+    return {kind:"assign", name, op:inc?"+":"-", expr:"1", ast:{o:"num",v:1}};
+  }
+  // a blocking wait: flagged in TeleOp, honoured as elapsed time in Autonomous
+  if((m=/^sleep\s*\(\s*([^)]+)\s*\)$/.exec(s))){
+    const ast=parseExpr(m[1]);
+    return {kind:"sleep", ms:(ast&&ast.o==="num")?ast.v:null, ast};
+  }
+  // controller = new PIDController(p, i, d)   /   PIDController c = new PIDController(…)
+  if((m=/^(?:[A-Z][\w.]*(?:<[^>]*>)?\s+)?([A-Za-z_$][\w$]*)\s*=\s*new\s+\w*PID\w*\s*\(([\s\S]*)\)$/.exec(s)))
     return {kind:"pidnew", obj:m[1], args:splitArgsTop(m[2]).map(x=>parseExpr(x))};
+  // a typed object declaration: hardware wiring and construction are handled
+  // elsewhere; anything else produces an object the bench doesn't model
+  if((m=/^(?:final\s+)?([A-Z][\w.]*(?:<[^>]*>)?)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(s))){
+    const rhs=m[3].trim();
+    if(/^hardwareMap\b/.test(rhs)||/^new\b/.test(rhs)||m[1]==="String") return null;
+    return {kind:"unknown", text:s, why:"objects of type "+m[1]+" aren't simulated"};
+  }
   // any other method on an object: setDirection, setMode, setPID, resetYaw …
   if((m=/^([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)$/.exec(s))){
     const raw=m[3];
     return {kind:"objcall", obj:m[1], meth:m[2], raw,
             args:splitArgsTop(raw).map(x=>parseExpr(x))};
   }
-  if((m=/^(?:(?:final|static)\s+)*(?:double|float|int|long|boolean)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(s)))
-    return {kind:"assign", name:m[1], expr:m[2].trim(), ast:parseExpr(m[2])};
-  if((m=/^([A-Za-z_$][\w$]*)\s*([+\-*/]?)=\s*([\s\S]+)$/.exec(s))){
-    if(m[3].charAt(0)==="=") return null;          // that was `==`, not an assignment
-    return {kind:"assign", name:m[1], op:m[2], expr:m[3].trim(), ast:parseExpr(m[3])};
+  if((m=/^(?:(?:final|static)\s+)*(?:double|float|int|long|boolean)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(s))){
+    const ast=parseExpr(m[2]);
+    if(!ast) return {kind:"unknown", text:s, why:"couldn't read the right-hand side"};
+    return {kind:"assign", name:m[1], expr:m[2].trim(), ast};
   }
-  return null;
+  // `telemetry = new MultipleTelemetry(…)`, `arm = hardwareMap.get(…)`: wiring, not state
+  if(/^[A-Za-z_$][\w$]*\s*=\s*(new\b|hardwareMap\b)/.test(s)) return null;
+  if((m=/^([A-Za-z_$][\w$]*)\s*([+\-*/]?)=\s*([\s\S]+)$/.exec(s))){
+    if(m[3].charAt(0)==="=") return {kind:"unknown", text:s, why:"a comparison on its own does nothing"};
+    const ast=parseExpr(m[3]);
+    if(!ast) return {kind:"unknown", text:s, why:"couldn't read the right-hand side"};
+    return {kind:"assign", name:m[1], op:m[2], expr:m[3].trim(), ast};
+  }
+  // a declaration without a value, e.g. `double x;`
+  if(/^(?:(?:final)\s+)?(?:double|float|int|long|boolean|String|[A-Z]\w*)\s+[A-Za-z_$][\w$]*$/.test(s)) return null;
+  return {kind:"unknown", text:s, why:"not a form the interpreter understands"};
+}
+
+/* Line number (1-based) of an offset in the comment-stripped source. Stripping
+   preserves newlines, so this is also the line in the file the team wrote. */
+function lineAt(code, at){
+  if(at==null||!code.src) return null;
+  let n=1; const s=code.src;
+  for(let i=0;i<at&&i<s.length;i++) if(s.charCodeAt(i)===10) n++;
+  return n;
+}
+
+/* What the interpreter actually runs, and what it had to skip. */
+function coverage(code){
+  const devices={}; code.devices.forEach(d=>devices[d.name]=1);
+  const pids={}; (code.inits||[]).forEach(st=>{ if(st.kind==="pidnew") pids[st.obj]=1; });
+  let total=0, ok=0; const skipped=[];
+  const walk=(list,phase)=>{ for(const st of list||[]){
+    total++;
+    if(st.kind==="if"){ ok++; walk(st.then,phase); walk(st.else,phase); continue; }
+    if(st.kind==="while"){ ok++; walk(st.body,phase); continue; }
+    if(st.kind==="unknown"){ skipped.push({line:lineAt(code,st.at), text:st.text, why:st.why, phase}); continue; }
+    if(st.kind==="objcall"){
+      const known = devices[st.obj] ? SIM_METHODS.test(st.meth)||NOOP_METHODS.test(st.meth)
+                  : pids[st.obj]||SIM_METHODS.test(st.meth)||NOOP_METHODS.test(st.meth);
+      if(!known){ skipped.push({line:lineAt(code,st.at), text:st.obj+"."+st.meth+"(…)",
+        why: devices[st.obj] ? "this device method isn't simulated"
+                             : "calls into other classes aren't simulated", phase}); continue; }
+      if(st.meth==="setMode"&&/RUN_USING_ENCODER|RUN_WITHOUT_ENCODER|STOP_AND_RESET_ENCODER|RUN_TO_POSITION/.test(st.raw||"")===false)
+        { skipped.push({line:lineAt(code,st.at), text:st.obj+".setMode(…)", why:"unrecognised run mode", phase}); continue; }
+    }
+    ok++;
+  }};
+  walk(code.inits,"init"); walk(code.stmts,"loop"); walk(code.auto,"auto");
+  return {total, understood:ok, skipped};
+}
+
+/* Fields FTC Dashboard would let you edit live: static and not final. */
+function collectStaticFields(src){
+  const out=[]; let m;
+  const re=/\b((?:(?:public|private|protected|static|final|volatile|transient)\s+)+)(double|float|int|long|boolean)\s+([^;(){}]+);/g;
+  while((m=re.exec(src))){
+    const mods=m[1];
+    if(!/\bstatic\b/.test(mods)||/\bfinal\b/.test(mods)) continue;
+    for(const part of m[3].split(",")){
+      const q=/^\s*([A-Za-z_$][\w$]*)/.exec(part); if(!q) continue;
+      out.push({name:q[1], type:m[2], isPublic:/\bpublic\b/.test(mods), at:m.index});
+    }
+  }
+  return out;
 }
 
 function parseJava(raw){
@@ -114,7 +219,7 @@ function parseJava(raw){
   else if(/@TeleOp\b/.test(src)){ out.kind="TeleOp"; out.opmode="(unnamed)"; }
   if((m=/class\s+(\w+)\s+extends\s+(\w+)/.exec(src))){ out.cls=m[1]; out.base=m[2]; }
   out.hasWait=/waitForStart\s*\(\s*\)/.test(src);
-  out.hasLoop=/opModeIsActive\s*\(\s*\)/.test(src);
+  out.hasLoop=false;                     // set once the main loop is actually found below
 
   // ---- device declarations, carrying the comment written just above them
   const reDecl=new RegExp("\\b(?:(?:public|private|protected|static|final)\\s+)*("+DEVT+")\\s+([A-Za-z_$][\\w$]*)\\s*(?:=[^;]*)?;","g");
@@ -180,24 +285,52 @@ function parseJava(raw){
     }
   }
 
-  // ---- init commands, before waitForStart
-  const wf=src.search(/waitForStart\s*\(/);
-  // keep every init statement, so setDirection and `new PIDController` run too
-  if(wf>0) out.inits=parseStatements(src.slice(0,wf));
+  out.src=src;
+  out.config=collectStaticFields(src);
+  out.hasConfigAnnotation=/@Config\b/.test(src);
+  out.timers=[];
+  const reTimer=/\bElapsedTime\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+ElapsedTime\s*\(/g;
+  while((m=reTimer.exec(src))) out.timers.push(m[1]);
 
-  // ---- the loop
-  const lm=/while\s*\(\s*opModeIsActive\s*\(\s*\)\s*\)\s*\{/.exec(src);
-  let loop="";
-  if(lm){ const r=matchBlock(src,lm.index+lm[0].length-1); loop=src.slice(r[0],r[1]); }
-  else {                                       // iterative OpMode: use loop()
+  // ---- init: runOpMode() up to waitForStart(), or an iterative init()
+  const rom=/void\s+runOpMode\s*\([^)]*\)\s*(?:throws\s+[\w.,\s]+)?\{/.exec(src);
+  const romBody = rom ? matchBlock(src, rom.index+rom[0].length-1) : null;
+  const wf=src.search(/waitForStart\s*\(\s*\)\s*;/);
+  if(romBody && wf>romBody[0] && wf<romBody[1]) out.inits=parseStatements(src.slice(romBody[0],wf),romBody[0]);
+  else if(wf>0) out.inits=parseStatements(src.slice(0,wf));
+  else {
+    const ii=/public\s+void\s+init\s*\(\s*\)\s*\{/.exec(src);
+    if(ii){ const r=matchBlock(src,ii.index+ii[0].length-1); out.inits=parseStatements(src.slice(r[0],r[1]),r[0]); }
+  }
+
+  // ---- the main loop: while (opModeIsActive()) / while (!isStopRequested()) / loop()
+  const lm=/while\s*\(\s*((?:!\s*)?(?:opModeIsActive|isStopRequested)\s*\(\s*\)(?:\s*&&\s*(?:!\s*)?(?:opModeIsActive|isStopRequested)\s*\(\s*\))?)\s*\)\s*\{/.exec(src);
+  let loop="", loopAt=0;
+  if(lm){ const r=matchBlock(src,lm.index+lm[0].length-1); loop=src.slice(r[0],r[1]); loopAt=r[0]; out.hasLoop=true; }
+  else {
     const im=/public\s+void\s+loop\s*\(\s*\)\s*\{/.exec(src);
-    if(im){ const r=matchBlock(src,im.index+im[0].length-1); loop=src.slice(r[0],r[1]); out.hasLoop=true; }
+    if(im){ const r=matchBlock(src,im.index+im[0].length-1); loop=src.slice(r[0],r[1]); loopAt=r[0]; out.hasLoop=true; }
   }
   out.loopSrc=loop;
-  out.stmts=parseStatements(loop);
+  out.stmts=parseStatements(loop,loopAt);
+
+  // ---- autonomous without a main loop: run what follows waitForStart() in order
+  out.auto=[];
+  let autoSrc="";
+  if(!out.hasLoop && romBody && wf>romBody[0] && wf<romBody[1]){
+    const from=src.indexOf(";",wf)+1;
+    autoSrc=src.slice(from,romBody[1]);
+    out.auto=parseStatements(autoSrc,from,{auto:true});
+  }
 
   const reT=/telemetry\s*\.\s*(addData|addLine)\s*\(\s*("([^"]*)")?\s*(?:,\s*([\s\S]*?))?\)\s*;/g;
-  while((m=reT.exec(loop))) out.telemetry.push({kind:m[1],label:m[3]||"",expr:(m[4]||"").trim()});
+  const telSrc=loop||autoSrc;
+  const seenTel={};
+  while((m=reT.exec(telSrc))){
+    const key=m[1]+"|"+(m[3]||"")+"|"+(m[4]||"").trim();
+    if(seenTel[key]) continue; seenTel[key]=1;
+    out.telemetry.push({kind:m[1],label:m[3]||"",expr:(m[4]||"").trim()});
+  }
 
   out.bindings = deriveBindings(out.stmts);
   return out;
@@ -252,6 +385,13 @@ function deriveBindings(stmts){
         // never touches a device directly
         B.push({pad:ctx.pad, btn:ctx.btn, cond:ctx.cond, dev:st.name,
                 op:(st.op||"")+"=", expr:st.expr, axes:[], assign:true});
+      }else if(st.kind==="objcall" && ctx){
+        // lift.setMode(STOP_AND_RESET_ENCODER), imu.resetYaw() — what a driver presses them for
+        const arg=String(st.raw||"").replace(/\b[A-Za-z_$][\w$]*\.(?:[A-Za-z_$][\w$]*\.)*(?=[A-Z_]+\b)/g,"").trim();
+        B.push({pad:ctx.pad, btn:ctx.btn, cond:ctx.cond, dev:st.obj, op:st.meth, expr:arg, axes:[]});
+      }else if(st.kind==="sleep" && ctx){
+        B.push({pad:ctx.pad, btn:ctx.btn, cond:ctx.cond, dev:"", op:"sleep",
+                expr:st.ms!=null?String(st.ms):"…", axes:[], sleep:true});
       }
     }
   };
@@ -261,11 +401,12 @@ function deriveBindings(stmts){
 /* Does anything in the loop actually move this device? */
 function isCommanded(code,name){
   let found=false;
-  const scan=list=>{ for(const st of list){
+  const scan=list=>{ for(const st of list||[]){
     if(st.kind==="if"){ scan(st.then); if(st.else) scan(st.else); }
+    else if(st.kind==="while") scan(st.body);
     else if(st.kind==="call"&&st.dev===name) found=true; } };
-  scan(code.stmts);
-  return found || code.inits.some(i=>i.dev===name);
+  scan(code.stmts); scan(code.auto); scan(code.inits);
+  return found;
 }
 
 /* Positions a device is commanded to, for gauge ranges and travel checks. */

@@ -62,15 +62,22 @@ function detectDrivetrain(code){
   if(motors.length<2) return null;
   const analog={};
   for(const b of (code.bindings||[])) if(b.analog) analog[b.dev]=1;
+  const isAuto = !code.hasLoop && code.auto && code.auto.length>0;
   const wheels=[];
   for(const mo of motors){
-    if(!analog[mo.name]) continue;      // PID-driven arms are not part of the drive base
+    if(isAuto){
+      // no sticks in an autonomous: go by name, but a "leftLift" is not a wheel
+      const c=wheelCorner(mo.name);
+      if(!(c.left||c.right)) continue;
+      if(!(c.front||c.back||/drive|wheel|motor/i.test(mo.name))) continue;
+    } else if(!analog[mo.name]) continue;   // PID-driven arms are not part of the drive base
     let expr=null;
-    const scan=list=>{ for(const st of list){
+    const scan=list=>{ for(const st of list||[]){
       if(st.kind==="if"){ scan(st.then); if(st.else) scan(st.else); }
+      else if(st.kind==="while") scan(st.body);
       else if(st.kind==="call"&&st.dev===mo.name&&(st.op==="setPower"||st.op==="setVelocity")) expr=st;
     }};
-    scan(code.stmts);
+    scan(code.stmts); scan(code.auto);
     if(!expr) continue;
     wheels.push(Object.assign({dev:mo.name, stmt:expr}, wheelCorner(mo.name)));
   }

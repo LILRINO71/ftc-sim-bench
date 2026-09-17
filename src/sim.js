@@ -1,29 +1,57 @@
 /* ============================================================
    7.  SIMULATION  — interprets the statement tree
+   Mirrors the Driver Station: load an OpMode, INIT runs everything
+   before waitForStart(), START runs the loop (TeleOp) or steps the
+   sequence (Autonomous), STOP halts motors.
    ============================================================ */
 const Sim={
-  dev:{}, vars:{}, pad:{1:{},2:{}}, t:0, chassis:{x:0,y:0,h:0},
-  reset(code,cad,map,opts){
-    this.dev={}; this.vars={}; this.t=0; this.chassis={x:0,y:0,h:0};
+  dev:{}, vars:{}, pad:{1:{},2:{}}, t:0, chassis:{x:0,y:0,h:0}, phase:"empty",
+
+  /* Build devices and state for an OpMode. Nothing runs yet. */
+  load(code,cad,map,opts){
+    this.dev={}; this.vars={}; this.t=0; this.pids={}; this.timers={};
+    const sp=(opts&&opts.startPose)||{x:0,y:0,h:0};
+    this.chassis={x:sp.x,y:sp.y,h:sp.h};
     this.code=code; this.cad=cad; this.map=map; this.opts=opts;
+    this.pc=0; this.sleepEnd=null; this.sleptMs=0; this.autoDone=false;
     for(const d of code.devices){
       const mech=cad.mechs.filter(m=>m.id===map[d.name])[0]||null;
       const spec=specFor(d,mech,opts.trust);
       const isMotor=spec.kind==="motor"||spec.kind==="crservo";
       this.dev[d.name]={kind:isMotor?"motor":"servo", mech, spec,
         cmd:isMotor?0:0.5, act:isMotor?0:0.5, revs:0, ticks:0, stalled:false,
-        reversed:false,
+        reversed:false, mode:"run", target:0,
         tpr: 28*(spec.ratio||19.2),        // goBILDA: 28 counts per motor rev
         restPos:restPosOf(code,d.name),
         sec60:spec.sec60||0.18, travelDeg:travelDegOf(spec)};
     }
-    this.pids={};
     for(const v in code.vars) this.vars[v]=code.vars[v];
+    for(const n of (code.timers||[])) this.timers[n]=0;
     this.dt=0.02;
-    this.exec(code.inits,this.env());          // directions, PID objects, start positions
-    for(const n in this.dev){ const s=this.dev[n]; s.act=s.cmd; }
     this.drivetrain=detectDrivetrain(code);
+    this.phase="loaded";
   },
+  /* INIT: everything before waitForStart() — directions, PID objects, start positions. */
+  init(){
+    if(!this.code) return;
+    this.exec(this.code.inits||[],this.env());
+    for(const n in this.dev){ const s=this.dev[n]; if(s.kind==="servo") s.act=s.cmd; }
+    this.phase="init";
+  },
+  start(){
+    if(!this.code) return;
+    if(this.phase==="loaded") this.init();
+    this.t=0; this.pc=0; this.sleepEnd=null; this.autoDone=false;
+    for(const n in this.timers) this.timers[n]=0;
+    this.phase="running";
+  },
+  stop(){
+    for(const n in this.dev){ const s=this.dev[n]; if(s.kind==="motor"){ s.cmd=0; s.mode="run"; } }
+    this.phase="stopped";
+  },
+  /* One call from load to running — what the tests and headless runs use. */
+  reset(code,cad,map,opts){ this.load(code,cad,map,opts); this.init(); this.start(); },
+
   /* ---- PID objects the OpMode constructs (ftclib, RoadRunner, hand-rolled) ---- */
   pidOp(name,meth,a){
     const st=this.pids[name]||(this.pids[name]={p:0,i:0,d:0,sum:0,prev:null});
@@ -58,12 +86,21 @@ const Sim={
       device(name,meth){
         const s=self.dev[name]; if(!s) return 0;
         if(meth==="getCurrentPosition") return Math.round(s.ticks);
+        if(meth==="getTargetPosition") return s.target;
         if(meth==="getPosition") return s.cmd;
         if(meth==="getPower") return s.cmd;
         if(meth==="getVelocity") return (s.spec.rpm||300)*s.act*s.tpr/60;
+        if(meth==="isBusy") return (s.mode==="rtp"&&Math.abs(s.target-s.ticks)>10)?1:0;
         return 0;
       },
       pid(name,meth,a){ return self.pidOp(name,meth,a); },
+      timer(name,unit){
+        if(self.timers[name]===undefined) return 0;
+        const s=self.t-self.timers[name];
+        return unit==="milliseconds"?s*1000 : unit==="nanoseconds"?s*1e9 : s;
+      },
+      runtime(){ return self.t; },
+      active(){ return self.phase==="running"?1:0; },
       pad(ref){
         const r=splitPadRef(ref); if(!r) return 0;
         const st=self.pad[r.pad]||{};
@@ -96,27 +133,74 @@ const Sim={
         const a=st.args.map(x=>evalNode(x,env));
         this.pidOp(st.obj,"setPID",a);
       }else if(st.kind==="sleep"){
-        this.sleptMs=(this.sleptMs||0)+st.ms;      // flagged, not simulated
+        // inside a TeleOp loop a sleep blocks the robot; the analysis reports it
+        this.sleptMs=(this.sleptMs||0)+(st.ast?evalNode(st.ast,env):(st.ms||0));
       }else if(st.kind==="objcall"){
         const s=this.dev[st.obj];
-        if(s&&st.meth==="setDirection") s.reversed=/REVERSE/i.test(st.raw||"");
-        else if(s&&st.meth==="setMode"&&/STOP_AND_RESET_ENCODER/i.test(st.raw||"")){ s.ticks=0; s.revs=0; }
+        if(this.timers[st.obj]!==undefined){ if(st.meth==="reset") this.timers[st.obj]=this.t; }
+        else if(s&&st.meth==="setDirection") s.reversed=/REVERSE/i.test(st.raw||"");
+        else if(s&&st.meth==="setTargetPosition") s.target=evalNode(st.args[0],env);
+        else if(s&&st.meth==="setMode"){
+          const raw=st.raw||"";
+          if(/STOP_AND_RESET_ENCODER/.test(raw)){ s.ticks=0; s.revs=0; s.cmd=0; }
+          else if(/RUN_TO_POSITION/.test(raw)) s.mode="rtp";
+          else if(/RUN_USING_ENCODER|RUN_WITHOUT_ENCODER/.test(raw)) s.mode="run";
+        }
         else if(/^set(PID|PIDF|P|I|D)$|^reset$/.test(st.meth) && !s)
           this.pidOp(st.obj,st.meth,st.args.map(x=>evalNode(x,env)));
         else if(st.meth==="resetYaw") this.chassis.h=0;
       }
+      // "while" and "unknown" nodes only mean something to the autonomous stepper
     }
   },
+  /* Autonomous: run statements in order. sleep() and wait loops hold the
+     program counter while simulated time passes, exactly as they hold the
+     real OpMode thread. */
+  stepAuto(){
+    const prog=this.code.auto||[]; const env=this.env();
+    for(let guard=0; this.pc<prog.length && guard<500; guard++){
+      const st=prog[this.pc];
+      if(st.kind==="sleep"){
+        if(this.sleepEnd==null){
+          const ms=st.ast?evalNode(st.ast,env):(st.ms||0);
+          this.sleepEnd=this.t+Math.max(0,ms)/1000;
+        }
+        if(this.t<this.sleepEnd) return;
+        this.sleepEnd=null; this.pc++; continue;
+      }
+      if(st.kind==="while"){
+        if(evalNode(st.condAst,env)){ this.exec(st.body,env); return; }   // one pass per tick
+        this.pc++; continue;
+      }
+      this.exec([st],env); this.pc++;
+    }
+    if(this.pc>=prog.length) this.autoDone=true;
+  },
   tick(dt){
-    if(!this.code) return;
-    this.t+=dt; this.dt=dt;
-    this.exec(this.code.stmts,this.env());
+    if(!this.code||this.phase==="empty") return;
+    this.dt=dt;
+    if(this.phase==="running"){
+      this.t+=dt;
+      if(this.code.hasLoop) this.exec(this.code.stmts,this.env());
+      else if(this.code.auto&&this.code.auto.length) this.stepAuto();
+    }
 
     for(const name in this.dev){
       const s=this.dev[name];
       if(s.kind==="motor"){
-        const slew=8*dt;
-        s.act += Math.sign(s.cmd-s.act)*Math.min(Math.abs(s.cmd-s.act),slew);
+        let drive=s.cmd;
+        if(s.mode==="rtp"){
+          /* RUN_TO_POSITION: the hub's own loop, capped by the commanded power.
+             Start slowing inside the distance the motor needs to stop from that
+             power — a fixed small band overshoots badly at speed. */
+          const err=s.target-s.ticks;
+          const perSec=(s.spec.rpm||300)/60*s.tpr;           // ticks/s at full power
+          const stop=Math.abs(s.cmd)*Math.abs(s.cmd)*perSec/(2*SLEW);
+          const band=Math.max(8,1.8*stop);
+          drive=Math.abs(s.cmd)*Math.max(-1,Math.min(1,err/band));
+        }
+        const slew=SLEW*dt;
+        s.act += Math.sign(drive-s.act)*Math.min(Math.abs(drive-s.act),slew);
         const rpm=(s.spec.rpm||300)*s.act;
         s.revs += rpm/60*dt;
         s.ticks = s.revs*s.tpr;                 // what getCurrentPosition() reads
@@ -141,7 +225,7 @@ const Sim={
   driveChassis(dt){
     const dtn=this.drivetrain;
     if(!dtn||!dtn.ok){ return; }
-    let L=0,R=0,nl=0,nr=0,strafe=0,ns=0;
+    let L=0,R=0,nl=0,nr=0,strafe=0;
     for(const w of dtn.wheels){
       const s=this.dev[w.dev]; if(!s) continue;
       if(w.left){ L+=s.act; nl++; } else if(w.right){ R+=s.act; nr++; }
@@ -151,7 +235,7 @@ const Sim={
       // strafe shows up as front/back disagreement on the same side
       const lf=this.dev[(dtn.wheels.filter(w=>w.left&&w.front)[0]||{}).dev];
       const lb=this.dev[(dtn.wheels.filter(w=>w.left&&w.back)[0]||{}).dev];
-      if(lf&&lb){ strafe=(lf.act-lb.act)/2; ns=1; }
+      if(lf&&lb) strafe=(lf.act-lb.act)/2;
     }
     const SPEED=1.15, TURN=3.4;               // m/s and rad/s at full power
     const v=(L+R)/2*SPEED, w=(R-L)/2*TURN;
@@ -164,3 +248,4 @@ const Sim={
   }
 };
 const clamp01=v=>Math.max(0,Math.min(1,v));
+const SLEW=8;                                   // motor power change per second (power units / s)

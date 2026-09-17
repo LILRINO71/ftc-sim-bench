@@ -102,12 +102,18 @@ function evalNode(n, env){
     case "call":{
       const a=n.args.map(x=>evalNode(x,env));
       // device readback: motor.getCurrentPosition(), servo.getPosition(), …
-      const dm=/^([A-Za-z_$][\w$]*)\.(getCurrentPosition|getPosition|getPower|getVelocity|getTargetPosition)$/.exec(n.name);
+      const dm=/^([A-Za-z_$][\w$]*)\.(getCurrentPosition|getPosition|getPower|getVelocity|getTargetPosition|isBusy)$/.exec(n.name);
       if(dm) return env.device(dm[1],dm[2]);
+      // ElapsedTime: runtime.seconds(), timer.milliseconds()
+      const tm=/^([A-Za-z_$][\w$]*)\.(seconds|milliseconds|nanoseconds|time)$/.exec(n.name);
+      if(tm&&env.timer) return env.timer(tm[1],tm[2]);
       // ftclib / roadrunner PID objects
       const pm=/^([A-Za-z_$][\w$]*)\.(calculate|setPID|setP|setI|setD|reset)$/.exec(n.name);
       if(pm) return env.pid(pm[1],pm[2],a);
       switch(n.name){
+        case "opModeIsActive": return env.active?env.active():1;
+        case "isStopRequested": return env.active?(env.active()?0:1):0;
+        case "getRuntime": return env.runtime?env.runtime():0;
         case "Math.abs": return Math.abs(a[0]);
         case "Math.max": return Math.max.apply(null,a);
         case "Math.min": return Math.min.apply(null,a);

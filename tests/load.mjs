@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ENGINE = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'analyze', 'sim'];
+const ENGINE = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'robotconfig', 'compare', 'analyze', 'sim'];
 const EXPORTS = [
   'HW_PARTS', 'GENERIC', 'hwFromPart', 'specFor',
   'SAMPLE_JAVA', 'DRIVE_JAVA', 'SAMPLE_CAD', 'synthGeometry',
@@ -13,6 +13,8 @@ const EXPORTS = [
   'JOINT_KINDS', 'leverOf', 'holdTorque', 'armAngleDeg',
   'parseExpr', 'evalNode', 'parseJava', 'deriveBindings', 'travelRange', 'isCommanded',
   'autoMap', 'wheelCorner', 'detectDrivetrain', 'analyze', 'Sim',
+  'AUTO_JAVA', 'coverage', 'lineAt', 'collectStaticFields',
+  'parseRobotConfig', 'checkRobotConfig', 'configKind', 'codeKind', 'diffOpModes',
 ];
 
 export function loadEngine() {

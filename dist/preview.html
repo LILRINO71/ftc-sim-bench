@@ -668,6 +668,79 @@ public class MecanumTeleOp extends LinearOpMode {
     }
 }`;
 
+const AUTO_JAVA = `package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.util.ElapsedTime;
+
+@Autonomous(name = "Timed Drive Auto", group = "samples")
+public class TimedDriveAuto extends LinearOpMode {
+
+    private ElapsedTime runtime = new ElapsedTime();
+
+    static final double DRIVE = 0.6;
+    static final double TURN = 0.5;
+
+    @Override
+    public void runOpMode() {
+        DcMotor leftFront = hardwareMap.get(DcMotor.class, "leftFront");
+        DcMotor rightFront = hardwareMap.get(DcMotor.class, "rightFront");
+        DcMotor leftBack = hardwareMap.get(DcMotor.class, "leftBack");
+        DcMotor rightBack = hardwareMap.get(DcMotor.class, "rightBack");
+        Servo lift = hardwareMap.get(Servo.class, "lift");
+
+        rightFront.setDirection(DcMotor.Direction.REVERSE);
+        rightBack.setDirection(DcMotor.Direction.REVERSE);
+        lift.setPosition(0.15);
+
+        telemetry.addData("Status", "Ready");
+        telemetry.update();
+
+        waitForStart();
+        runtime.reset();
+
+        // drive forward
+        leftFront.setPower(DRIVE);
+        rightFront.setPower(DRIVE);
+        leftBack.setPower(DRIVE);
+        rightBack.setPower(DRIVE);
+        sleep(1200);
+
+        // turn right in place
+        leftFront.setPower(TURN);
+        leftBack.setPower(TURN);
+        rightFront.setPower(-TURN);
+        rightBack.setPower(-TURN);
+        sleep(700);
+
+        // stop and raise the lift
+        leftFront.setPower(0);
+        rightFront.setPower(0);
+        leftBack.setPower(0);
+        rightBack.setPower(0);
+        lift.setPosition(0.75);
+        sleep(800);
+
+        // creep backwards until five seconds have passed
+        while (opModeIsActive() && runtime.seconds() < 5.0) {
+            leftFront.setPower(-0.3);
+            rightFront.setPower(-0.3);
+            leftBack.setPower(-0.3);
+            rightBack.setPower(-0.3);
+            telemetry.addData("Elapsed", runtime.seconds());
+            telemetry.update();
+        }
+
+        leftFront.setPower(0);
+        rightFront.setPower(0);
+        leftBack.setPower(0);
+        rightBack.setPower(0);
+    }
+}`;
+
 /* Measured out of the user's fulll.step (AP242, metre units). */
 const SAMPLE_CAD = {
   name:"fulll.step", units:"METRE", pointCount:127206,
@@ -1384,12 +1457,18 @@ function evalNode(n, env){
     case "call":{
       const a=n.args.map(x=>evalNode(x,env));
       // device readback: motor.getCurrentPosition(), servo.getPosition(), …
-      const dm=/^([A-Za-z_$][\w$]*)\.(getCurrentPosition|getPosition|getPower|getVelocity|getTargetPosition)$/.exec(n.name);
+      const dm=/^([A-Za-z_$][\w$]*)\.(getCurrentPosition|getPosition|getPower|getVelocity|getTargetPosition|isBusy)$/.exec(n.name);
       if(dm) return env.device(dm[1],dm[2]);
+      // ElapsedTime: runtime.seconds(), timer.milliseconds()
+      const tm=/^([A-Za-z_$][\w$]*)\.(seconds|milliseconds|nanoseconds|time)$/.exec(n.name);
+      if(tm&&env.timer) return env.timer(tm[1],tm[2]);
       // ftclib / roadrunner PID objects
       const pm=/^([A-Za-z_$][\w$]*)\.(calculate|setPID|setP|setI|setD|reset)$/.exec(n.name);
       if(pm) return env.pid(pm[1],pm[2],a);
       switch(n.name){
+        case "opModeIsActive": return env.active?env.active():1;
+        case "isStopRequested": return env.active?(env.active()?0:1):0;
+        case "getRuntime": return env.runtime?env.runtime():0;
         case "Math.abs": return Math.abs(a[0]);
         case "Math.max": return Math.max.apply(null,a);
         case "Math.min": return Math.min.apply(null,a);
@@ -1451,47 +1530,75 @@ function stripComments(s){
           .replace(/\/\/[^\n]*/g,m=>" ".repeat(m.length));
 }
 
-/* Split a block into an ordered statement list, recursing into if/else. */
-function parseStatements(src){
+/* Split a block into an ordered statement list, recursing into if/else.
+   `base` is this block's offset in the whole file, so every statement can
+   report its line. Anything the interpreter can't run becomes an "unknown"
+   node with a reason — surfaced to the user, never silently dropped. */
+function parseStatements(src, base, opts){
+  base=base||0; opts=opts||{};
   const out=[]; let i=0;
   while(i<src.length){
     while(i<src.length && /\s/.test(src[i])) i++;
     if(i>=src.length) break;
-    if(src[i]==="{"){ const r=matchBlock(src,i); out.push.apply(out,parseStatements(src.slice(r[0],r[1]))); i=r[1]+1; continue; }
-    const kw=/^(if|while|for|switch)\b/.exec(src.slice(i));
+    if(src[i]==="{"){ const r=matchBlock(src,i); out.push.apply(out,parseStatements(src.slice(r[0],r[1]),base+r[0],opts)); i=r[1]+1; continue; }
+    const kw=/^(if|while|for|switch|do)\b/.exec(src.slice(i));
     if(kw){
+      const at=base+i;
       const lp=src.indexOf("(",i);
-      if(lp<0){ break; }
+      if(lp<0||kw[1]==="do"){ out.push({kind:"unknown",at,text:src.slice(i,i+40).trim(),why:"do/while loops inside the OpMode aren't simulated"}); break; }
       let d=0,j=lp;
       for(;j<src.length;j++){ if(src[j]==="(")d++; else if(src[j]===")"){d--; if(!d)break;} }
       const cond=src.slice(lp+1,j);
       let k=j+1; while(k<src.length&&/\s/.test(src[k]))k++;
-      let bodySrc,end;
-      if(src[k]==="{"){ const r=matchBlock(src,k); bodySrc=src.slice(r[0],r[1]); end=r[1]+1; }
-      else { const sc=src.indexOf(";",k); if(sc<0) break; bodySrc=src.slice(k,sc+1); end=sc+1; }
-      if(kw[1]!=="if"){ i=end; continue; }                        // loops/switch: skip body
+      let bodySrc,bodyAt,end;
+      if(src[k]==="{"){ const r=matchBlock(src,k); bodySrc=src.slice(r[0],r[1]); bodyAt=base+r[0]; end=r[1]+1; }
+      else { const sc=src.indexOf(";",k); if(sc<0) break; bodySrc=src.slice(k,sc+1); bodyAt=base+k; end=sc+1; }
+      if(kw[1]!=="if"){
+        // in an autonomous sequence a while loop is a wait: run the body each
+        // tick until the condition goes false
+        if(opts.auto && kw[1]==="while"){
+          out.push({kind:"while", at, cond, condAst:parseExpr(cond), body:parseStatements(bodySrc,bodyAt)});
+          i=end; continue;
+        }
+        out.push({kind:"unknown",at,text:kw[1]+" ("+cond.trim().slice(0,48)+")",
+          why:kw[1]==="switch"?"switch statements aren't simulated":"loops inside the OpMode loop aren't simulated"});
+        i=end; continue;
+      }
+      // the sample autos wrap their whole sequence in `if (opModeIsActive())`
+      if(opts.auto && /^\s*opModeIsActive\s*\(\s*\)\s*$/.test(cond)){
+        out.push.apply(out,parseStatements(bodySrc,bodyAt,opts));
+        i=end; continue;
+      }
       let elseStmts=null, m2=end;
       while(m2<src.length&&/\s/.test(src[m2]))m2++;
       if(/^else\b/.test(src.slice(m2))){
         let k2=m2+4; while(k2<src.length&&/\s/.test(src[k2]))k2++;
-        if(src[k2]==="{"){ const r=matchBlock(src,k2); elseStmts=parseStatements(src.slice(r[0],r[1])); end=r[1]+1; }
+        if(src[k2]==="{"){ const r=matchBlock(src,k2); elseStmts=parseStatements(src.slice(r[0],r[1]),base+r[0]); end=r[1]+1; }
         else { // else if … / single statement
           const rest=src.slice(k2);
           const stop=/^if\b/.test(rest)? findStatementEnd(rest) : rest.indexOf(";")+1;
-          elseStmts=parseStatements(rest.slice(0,stop)); end=k2+stop;
+          elseStmts=parseStatements(rest.slice(0,stop),base+k2); end=k2+stop;
         }
       }
-      out.push({kind:"if", cond, condAst:parseExpr(cond), then:parseStatements(bodySrc), else:elseStmts});
+      // `if (isStopRequested()) return;` is a guard for the real robot, not behaviour
+      if(!/^\s*isStopRequested\s*\(\s*\)\s*$/.test(cond))
+        out.push({kind:"if", at, cond, condAst:parseExpr(cond), then:parseStatements(bodySrc,bodyAt), else:elseStmts});
       i=end; continue;
     }
     const sc=src.indexOf(";",i);
     if(sc<0) break;
-    const st=classifyStatement(src.slice(i,sc).trim());
-    if(st) out.push(st);
+    const text=src.slice(i,sc).trim();
+    const st=classifyStatement(text);
+    if(st){ st.at=base+i; out.push(st); }
     i=sc+1;
   }
   return out;
 }
+
+/* Calls the simulator acts on, and calls that are safe to ignore. Anything
+   else on a non-device object is reported as not simulated. */
+const SIM_METHODS = /^(setDirection|setMode|setTargetPosition|setPID|setPIDF|setP|setI|setD|reset|resetYaw)$/;
+const NOOP_METHODS = /^(initialize|clear|clearAll|addData|addLine|setMsTransmissionInterval|setAutoClear|setZeroPowerBehavior|setCaption|speak|log|getInstance|getTelemetry|close|setPwmEnable|setPwmDisable)$/;
 function findStatementEnd(rest){
   const lp=rest.indexOf("(");
   let d=0,j=lp;
@@ -1516,24 +1623,101 @@ function classifyStatement(s){
   if((m=/^([A-Za-z_$][\w$]*)\s*\.\s*(setPosition|setPower|setVelocity)\s*\(([\s\S]*)\)$/.exec(s)))
     return {kind:"call", dev:m[1], op:m[2], expr:m[3].trim(), ast:parseExpr(m[3])};
   if(/^telemetry\s*\./.test(s)) return null;
-  // a blocking wait inside the loop — the bench flags it and skips it
-  if((m=/^sleep\s*\(\s*(\d+)\s*\)$/.exec(s))) return {kind:"sleep", ms:+m[1]};
-  // controller = new PIDController(p, i, d)
-  if((m=/^([A-Za-z_$][\w$]*)\s*=\s*new\s+\w*PID\w*\s*\(([\s\S]*)\)$/.exec(s)))
+  if(/^(idle|waitForStart|telemetry\.update)\s*\(\s*\)$/.test(s)) return null;
+  if(/^(return|break|continue)\b/.test(s))
+    return {kind:"unknown", text:s, why:"control flow ("+s.split(/\W/)[0]+") isn't simulated"};
+  // count++  count--  ++count  --count
+  if((m=/^(\+\+|--)\s*([A-Za-z_$][\w$]*)$/.exec(s))||(m=/^([A-Za-z_$][\w$]*)\s*(\+\+|--)$/.exec(s))){
+    const pre=m[1]==="++"||m[1]==="--";
+    const name=pre?m[2]:m[1], inc=(pre?m[1]:m[2])==="++";
+    return {kind:"assign", name, op:inc?"+":"-", expr:"1", ast:{o:"num",v:1}};
+  }
+  // a blocking wait: flagged in TeleOp, honoured as elapsed time in Autonomous
+  if((m=/^sleep\s*\(\s*([^)]+)\s*\)$/.exec(s))){
+    const ast=parseExpr(m[1]);
+    return {kind:"sleep", ms:(ast&&ast.o==="num")?ast.v:null, ast};
+  }
+  // controller = new PIDController(p, i, d)   /   PIDController c = new PIDController(…)
+  if((m=/^(?:[A-Z][\w.]*(?:<[^>]*>)?\s+)?([A-Za-z_$][\w$]*)\s*=\s*new\s+\w*PID\w*\s*\(([\s\S]*)\)$/.exec(s)))
     return {kind:"pidnew", obj:m[1], args:splitArgsTop(m[2]).map(x=>parseExpr(x))};
+  // a typed object declaration: hardware wiring and construction are handled
+  // elsewhere; anything else produces an object the bench doesn't model
+  if((m=/^(?:final\s+)?([A-Z][\w.]*(?:<[^>]*>)?)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(s))){
+    const rhs=m[3].trim();
+    if(/^hardwareMap\b/.test(rhs)||/^new\b/.test(rhs)||m[1]==="String") return null;
+    return {kind:"unknown", text:s, why:"objects of type "+m[1]+" aren't simulated"};
+  }
   // any other method on an object: setDirection, setMode, setPID, resetYaw …
   if((m=/^([A-Za-z_$][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(([\s\S]*)\)$/.exec(s))){
     const raw=m[3];
     return {kind:"objcall", obj:m[1], meth:m[2], raw,
             args:splitArgsTop(raw).map(x=>parseExpr(x))};
   }
-  if((m=/^(?:(?:final|static)\s+)*(?:double|float|int|long|boolean)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(s)))
-    return {kind:"assign", name:m[1], expr:m[2].trim(), ast:parseExpr(m[2])};
-  if((m=/^([A-Za-z_$][\w$]*)\s*([+\-*/]?)=\s*([\s\S]+)$/.exec(s))){
-    if(m[3].charAt(0)==="=") return null;          // that was `==`, not an assignment
-    return {kind:"assign", name:m[1], op:m[2], expr:m[3].trim(), ast:parseExpr(m[3])};
+  if((m=/^(?:(?:final|static)\s+)*(?:double|float|int|long|boolean)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]+)$/.exec(s))){
+    const ast=parseExpr(m[2]);
+    if(!ast) return {kind:"unknown", text:s, why:"couldn't read the right-hand side"};
+    return {kind:"assign", name:m[1], expr:m[2].trim(), ast};
   }
-  return null;
+  // `telemetry = new MultipleTelemetry(…)`, `arm = hardwareMap.get(…)`: wiring, not state
+  if(/^[A-Za-z_$][\w$]*\s*=\s*(new\b|hardwareMap\b)/.test(s)) return null;
+  if((m=/^([A-Za-z_$][\w$]*)\s*([+\-*/]?)=\s*([\s\S]+)$/.exec(s))){
+    if(m[3].charAt(0)==="=") return {kind:"unknown", text:s, why:"a comparison on its own does nothing"};
+    const ast=parseExpr(m[3]);
+    if(!ast) return {kind:"unknown", text:s, why:"couldn't read the right-hand side"};
+    return {kind:"assign", name:m[1], op:m[2], expr:m[3].trim(), ast};
+  }
+  // a declaration without a value, e.g. `double x;`
+  if(/^(?:(?:final)\s+)?(?:double|float|int|long|boolean|String|[A-Z]\w*)\s+[A-Za-z_$][\w$]*$/.test(s)) return null;
+  return {kind:"unknown", text:s, why:"not a form the interpreter understands"};
+}
+
+/* Line number (1-based) of an offset in the comment-stripped source. Stripping
+   preserves newlines, so this is also the line in the file the team wrote. */
+function lineAt(code, at){
+  if(at==null||!code.src) return null;
+  let n=1; const s=code.src;
+  for(let i=0;i<at&&i<s.length;i++) if(s.charCodeAt(i)===10) n++;
+  return n;
+}
+
+/* What the interpreter actually runs, and what it had to skip. */
+function coverage(code){
+  const devices={}; code.devices.forEach(d=>devices[d.name]=1);
+  const pids={}; (code.inits||[]).forEach(st=>{ if(st.kind==="pidnew") pids[st.obj]=1; });
+  let total=0, ok=0; const skipped=[];
+  const walk=(list,phase)=>{ for(const st of list||[]){
+    total++;
+    if(st.kind==="if"){ ok++; walk(st.then,phase); walk(st.else,phase); continue; }
+    if(st.kind==="while"){ ok++; walk(st.body,phase); continue; }
+    if(st.kind==="unknown"){ skipped.push({line:lineAt(code,st.at), text:st.text, why:st.why, phase}); continue; }
+    if(st.kind==="objcall"){
+      const known = devices[st.obj] ? SIM_METHODS.test(st.meth)||NOOP_METHODS.test(st.meth)
+                  : pids[st.obj]||SIM_METHODS.test(st.meth)||NOOP_METHODS.test(st.meth);
+      if(!known){ skipped.push({line:lineAt(code,st.at), text:st.obj+"."+st.meth+"(…)",
+        why: devices[st.obj] ? "this device method isn't simulated"
+                             : "calls into other classes aren't simulated", phase}); continue; }
+      if(st.meth==="setMode"&&/RUN_USING_ENCODER|RUN_WITHOUT_ENCODER|STOP_AND_RESET_ENCODER|RUN_TO_POSITION/.test(st.raw||"")===false)
+        { skipped.push({line:lineAt(code,st.at), text:st.obj+".setMode(…)", why:"unrecognised run mode", phase}); continue; }
+    }
+    ok++;
+  }};
+  walk(code.inits,"init"); walk(code.stmts,"loop"); walk(code.auto,"auto");
+  return {total, understood:ok, skipped};
+}
+
+/* Fields FTC Dashboard would let you edit live: static and not final. */
+function collectStaticFields(src){
+  const out=[]; let m;
+  const re=/\b((?:(?:public|private|protected|static|final|volatile|transient)\s+)+)(double|float|int|long|boolean)\s+([^;(){}]+);/g;
+  while((m=re.exec(src))){
+    const mods=m[1];
+    if(!/\bstatic\b/.test(mods)||/\bfinal\b/.test(mods)) continue;
+    for(const part of m[3].split(",")){
+      const q=/^\s*([A-Za-z_$][\w$]*)/.exec(part); if(!q) continue;
+      out.push({name:q[1], type:m[2], isPublic:/\bpublic\b/.test(mods), at:m.index});
+    }
+  }
+  return out;
 }
 
 function parseJava(raw){
@@ -1548,7 +1732,7 @@ function parseJava(raw){
   else if(/@TeleOp\b/.test(src)){ out.kind="TeleOp"; out.opmode="(unnamed)"; }
   if((m=/class\s+(\w+)\s+extends\s+(\w+)/.exec(src))){ out.cls=m[1]; out.base=m[2]; }
   out.hasWait=/waitForStart\s*\(\s*\)/.test(src);
-  out.hasLoop=/opModeIsActive\s*\(\s*\)/.test(src);
+  out.hasLoop=false;                     // set once the main loop is actually found below
 
   // ---- device declarations, carrying the comment written just above them
   const reDecl=new RegExp("\\b(?:(?:public|private|protected|static|final)\\s+)*("+DEVT+")\\s+([A-Za-z_$][\\w$]*)\\s*(?:=[^;]*)?;","g");
@@ -1614,24 +1798,52 @@ function parseJava(raw){
     }
   }
 
-  // ---- init commands, before waitForStart
-  const wf=src.search(/waitForStart\s*\(/);
-  // keep every init statement, so setDirection and `new PIDController` run too
-  if(wf>0) out.inits=parseStatements(src.slice(0,wf));
+  out.src=src;
+  out.config=collectStaticFields(src);
+  out.hasConfigAnnotation=/@Config\b/.test(src);
+  out.timers=[];
+  const reTimer=/\bElapsedTime\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+ElapsedTime\s*\(/g;
+  while((m=reTimer.exec(src))) out.timers.push(m[1]);
 
-  // ---- the loop
-  const lm=/while\s*\(\s*opModeIsActive\s*\(\s*\)\s*\)\s*\{/.exec(src);
-  let loop="";
-  if(lm){ const r=matchBlock(src,lm.index+lm[0].length-1); loop=src.slice(r[0],r[1]); }
-  else {                                       // iterative OpMode: use loop()
+  // ---- init: runOpMode() up to waitForStart(), or an iterative init()
+  const rom=/void\s+runOpMode\s*\([^)]*\)\s*(?:throws\s+[\w.,\s]+)?\{/.exec(src);
+  const romBody = rom ? matchBlock(src, rom.index+rom[0].length-1) : null;
+  const wf=src.search(/waitForStart\s*\(\s*\)\s*;/);
+  if(romBody && wf>romBody[0] && wf<romBody[1]) out.inits=parseStatements(src.slice(romBody[0],wf),romBody[0]);
+  else if(wf>0) out.inits=parseStatements(src.slice(0,wf));
+  else {
+    const ii=/public\s+void\s+init\s*\(\s*\)\s*\{/.exec(src);
+    if(ii){ const r=matchBlock(src,ii.index+ii[0].length-1); out.inits=parseStatements(src.slice(r[0],r[1]),r[0]); }
+  }
+
+  // ---- the main loop: while (opModeIsActive()) / while (!isStopRequested()) / loop()
+  const lm=/while\s*\(\s*((?:!\s*)?(?:opModeIsActive|isStopRequested)\s*\(\s*\)(?:\s*&&\s*(?:!\s*)?(?:opModeIsActive|isStopRequested)\s*\(\s*\))?)\s*\)\s*\{/.exec(src);
+  let loop="", loopAt=0;
+  if(lm){ const r=matchBlock(src,lm.index+lm[0].length-1); loop=src.slice(r[0],r[1]); loopAt=r[0]; out.hasLoop=true; }
+  else {
     const im=/public\s+void\s+loop\s*\(\s*\)\s*\{/.exec(src);
-    if(im){ const r=matchBlock(src,im.index+im[0].length-1); loop=src.slice(r[0],r[1]); out.hasLoop=true; }
+    if(im){ const r=matchBlock(src,im.index+im[0].length-1); loop=src.slice(r[0],r[1]); loopAt=r[0]; out.hasLoop=true; }
   }
   out.loopSrc=loop;
-  out.stmts=parseStatements(loop);
+  out.stmts=parseStatements(loop,loopAt);
+
+  // ---- autonomous without a main loop: run what follows waitForStart() in order
+  out.auto=[];
+  let autoSrc="";
+  if(!out.hasLoop && romBody && wf>romBody[0] && wf<romBody[1]){
+    const from=src.indexOf(";",wf)+1;
+    autoSrc=src.slice(from,romBody[1]);
+    out.auto=parseStatements(autoSrc,from,{auto:true});
+  }
 
   const reT=/telemetry\s*\.\s*(addData|addLine)\s*\(\s*("([^"]*)")?\s*(?:,\s*([\s\S]*?))?\)\s*;/g;
-  while((m=reT.exec(loop))) out.telemetry.push({kind:m[1],label:m[3]||"",expr:(m[4]||"").trim()});
+  const telSrc=loop||autoSrc;
+  const seenTel={};
+  while((m=reT.exec(telSrc))){
+    const key=m[1]+"|"+(m[3]||"")+"|"+(m[4]||"").trim();
+    if(seenTel[key]) continue; seenTel[key]=1;
+    out.telemetry.push({kind:m[1],label:m[3]||"",expr:(m[4]||"").trim()});
+  }
 
   out.bindings = deriveBindings(out.stmts);
   return out;
@@ -1686,6 +1898,13 @@ function deriveBindings(stmts){
         // never touches a device directly
         B.push({pad:ctx.pad, btn:ctx.btn, cond:ctx.cond, dev:st.name,
                 op:(st.op||"")+"=", expr:st.expr, axes:[], assign:true});
+      }else if(st.kind==="objcall" && ctx){
+        // lift.setMode(STOP_AND_RESET_ENCODER), imu.resetYaw() — what a driver presses them for
+        const arg=String(st.raw||"").replace(/\b[A-Za-z_$][\w$]*\.(?:[A-Za-z_$][\w$]*\.)*(?=[A-Z_]+\b)/g,"").trim();
+        B.push({pad:ctx.pad, btn:ctx.btn, cond:ctx.cond, dev:st.obj, op:st.meth, expr:arg, axes:[]});
+      }else if(st.kind==="sleep" && ctx){
+        B.push({pad:ctx.pad, btn:ctx.btn, cond:ctx.cond, dev:"", op:"sleep",
+                expr:st.ms!=null?String(st.ms):"…", axes:[], sleep:true});
       }
     }
   };
@@ -1695,11 +1914,12 @@ function deriveBindings(stmts){
 /* Does anything in the loop actually move this device? */
 function isCommanded(code,name){
   let found=false;
-  const scan=list=>{ for(const st of list){
+  const scan=list=>{ for(const st of list||[]){
     if(st.kind==="if"){ scan(st.then); if(st.else) scan(st.else); }
+    else if(st.kind==="while") scan(st.body);
     else if(st.kind==="call"&&st.dev===name) found=true; } };
-  scan(code.stmts);
-  return found || code.inits.some(i=>i.dev===name);
+  scan(code.stmts); scan(code.auto); scan(code.inits);
+  return found;
 }
 
 /* Positions a device is commanded to, for gauge ranges and travel checks. */
@@ -1818,21 +2038,209 @@ function detectDrivetrain(code){
   if(motors.length<2) return null;
   const analog={};
   for(const b of (code.bindings||[])) if(b.analog) analog[b.dev]=1;
+  const isAuto = !code.hasLoop && code.auto && code.auto.length>0;
   const wheels=[];
   for(const mo of motors){
-    if(!analog[mo.name]) continue;      // PID-driven arms are not part of the drive base
+    if(isAuto){
+      // no sticks in an autonomous: go by name, but a "leftLift" is not a wheel
+      const c=wheelCorner(mo.name);
+      if(!(c.left||c.right)) continue;
+      if(!(c.front||c.back||/drive|wheel|motor/i.test(mo.name))) continue;
+    } else if(!analog[mo.name]) continue;   // PID-driven arms are not part of the drive base
     let expr=null;
-    const scan=list=>{ for(const st of list){
+    const scan=list=>{ for(const st of list||[]){
       if(st.kind==="if"){ scan(st.then); if(st.else) scan(st.else); }
+      else if(st.kind==="while") scan(st.body);
       else if(st.kind==="call"&&st.dev===mo.name&&(st.op==="setPower"||st.op==="setVelocity")) expr=st;
     }};
-    scan(code.stmts);
+    scan(code.stmts); scan(code.auto);
     if(!expr) continue;
     wheels.push(Object.assign({dev:mo.name, stmt:expr}, wheelCorner(mo.name)));
   }
   if(wheels.length<2) return null;
   const hasSide=wheels.some(w=>w.left)&&wheels.some(w=>w.right);
   return {wheels, style: wheels.length>=4?"mecanum":"tank", ok:hasSide};
+}
+
+// ---- src/robotconfig.js ----
+/* ============================================================
+   5b. ROBOT CONFIGURATION  — the .xml the Robot Controller keeps
+   Every hardwareMap.get("name") in an OpMode has to match a device
+   in this file, by exact name and compatible type, or the OpMode
+   throws during INIT. CAD can't check that; this can.
+   ============================================================ */
+
+/* Kind of device a configuration tag describes. Tags vary by SDK version and
+   vendor (goBILDA5202SeriesMotor, RevRobotics20HDHexMotor, ContinuousRotationServo,
+   ControlHubImuBHI260AP …), so classify by what the name says. */
+function configKind(tag){
+  const t=String(tag).toLowerCase();
+  if(/continuousrotationservo|crservo/.test(t)) return "crservo";
+  if(/servo/.test(t)) return "servo";
+  if(/motor/.test(t)) return "motor";
+  if(/imu|bno055|bhi260|navx|gyro/.test(t)) return "imu";
+  if(/webcam|camera/.test(t)) return "camera";
+  return "other";
+}
+/* Kind of device a Java type asks for. */
+function codeKind(type){
+  const t=String(type||"").toLowerCase();
+  if(!t||t==="?") return null;
+  if(/crservo/.test(t)) return "crservo";
+  if(/servo/.test(t)) return "servo";
+  if(/dcmotor/.test(t)) return "motor";
+  if(/imu|bno055|navx|gyro/.test(t)) return "imu";
+  if(/webcam|camera/.test(t)) return "camera";
+  return "other";
+}
+
+function parseRobotConfig(xml){
+  // a device commented out of the file is not configured
+  const text=String(xml).replace(/<!--[\s\S]*?-->/g,"");
+  if(!/<\s*Robot\b/.test(text)) throw new Error("not a Robot Controller configuration (no <Robot> element)");
+  const devices=[], modules=[], stack=[];
+  const attrsOf=s=>{ const o={}; let a; const ra=/([\w:.-]+)\s*=\s*"([^"]*)"/g; while((a=ra.exec(s))) o[a[1]]=a[2]; return o; };
+  const re=/<(\/)?\s*([A-Za-z_][\w.:-]*)\b([^>]*?)(\/)?\s*>/g;
+  let m;
+  while((m=re.exec(text))){
+    const closing=!!m[1], tag=m[2], selfClose=!!m[4];
+    if(closing){
+      for(let i=stack.length-1;i>=0;i--) if(stack[i].tag===tag){ stack.length=i; break; }
+      continue;
+    }
+    const at=attrsOf(m[3]);
+    if(!selfClose){
+      stack.push({tag, name:at.name||null});
+      if(tag==="LynxModule") modules.push({name:at.name||"module", port:at.port!=null?+at.port:null});
+      continue;
+    }
+    if(at.name==null) continue;
+    let mod=null;
+    for(let i=stack.length-1;i>=0;i--) if(stack[i].tag==="LynxModule"){ mod=stack[i].name; break; }
+    devices.push({tag, name:at.name, kind:configKind(tag),
+      port:at.port!=null?+at.port:null, bus:at.bus!=null?+at.bus:null, module:mod});
+  }
+  return {devices, modules};
+}
+
+/* Findings for an OpMode against a configuration. Same shape as analyze(). */
+function checkRobotConfig(code, cfg){
+  const F=[];
+  const add=(key,sev,title,body,math,fix)=>F.push({key,sev,title,body,math,fix});
+  const exact={}, folded={};
+  for(const d of cfg.devices){ exact[d.name]=d; folded[d.name.toLowerCase()]=d; }
+  const used={};
+  const TYPED={servo:1,crservo:1,motor:1,imu:1};
+  const where=d=>(d.module?d.module+" · ":"")+(d.bus!=null?"I²C bus "+d.bus:d.port!=null?"port "+d.port:"");
+  const ok=[];
+  let problems=0;
+  for(const d of code.devices){
+    if(!d.cfg) continue;
+    const hit=exact[d.cfg];
+    if(hit){
+      used[hit.name]=1;
+      const ck=codeKind(d.type);
+      if(TYPED[ck]&&TYPED[hit.kind]&&ck!==hit.kind){
+        problems++;
+        add("cfgtype:"+d.name,"fail",
+          "<code>\""+d.cfg+"\"</code> is configured as a "+hit.kind+" but the code asks for a "+d.type,
+          "The name matches, so the lookup gets past the first check, but the device on <b>"+where(hit)+"</b> is a <b>"+hit.tag+"</b>. "+
+          (ck==="servo"&&hit.kind==="crservo" ? "A continuous-rotation servo can't hold a position — <code>setPosition</code> sets its speed." :
+           "The SDK rejects the lookup when the type doesn't fit, and the OpMode stops during INIT."),
+          null,
+          "Change the configured type on the Driver Station, or change the Java type to match the hardware.");
+      } else ok.push(("\""+d.cfg+"\"").padEnd(18)+where(hit).padEnd(26)+hit.tag);
+      continue;
+    }
+    const near=folded[d.cfg.toLowerCase()];
+    if(near){
+      used[near.name]=1; problems++;
+      add("cfgcase:"+d.name,"fail",
+        "<code>\""+d.cfg+"\"</code> doesn't match <code>\""+near.name+"\"</code> — names are case-sensitive",
+        "The configuration has a device that differs only in capitalisation. <code>hardwareMap</code> compares names exactly, so the lookup fails and the OpMode stops during INIT.",
+        null, "Use <code>\""+near.name+"\"</code> in the code, or rename the device in the configuration.");
+      continue;
+    }
+    problems++;
+    add("cfgmiss:"+d.name,"fail",
+      "<code>\""+d.cfg+"\"</code> isn't in the robot configuration",
+      "<code>hardwareMap</code> throws when it can't find a name, so the OpMode stops during INIT before anything moves.",
+      null, "Add <code>"+d.cfg+"</code> to the configuration on the Driver Station, or fix the name in the code.");
+  }
+  const unused=cfg.devices.filter(d=>!used[d.name]&&d.kind!=="camera"&&d.kind!=="imu");
+  if(unused.length)
+    add("cfgunused","info",unused.length+" configured device"+(unused.length>1?"s":"")+" this OpMode never uses",
+      "Not a problem on its own — another OpMode may use them. Worth a look if you expected one of these to move.",
+      unused.map(d=>("\""+d.name+"\"").padEnd(18)+where(d).padEnd(26)+d.tag).join("\n"), null);
+  if(!problems && code.devices.some(d=>d.cfg))
+    add("cfgok","pass","Every hardwareMap name matches the robot configuration",
+      "Names match exactly and every servo, motor and IMU is the type the code expects.",
+      ok.join("\n"), null);
+  return F;
+}
+
+// ---- src/compare.js ----
+/* ============================================================
+   5c. COMPARE TWO OPMODES
+   Teams keep several versions of a TeleOp and lose track of what
+   changed. Diff them the way a driver thinks: control by control.
+   ============================================================ */
+const CONTROL_ORDER=["a","b","x","y","left_bumper","right_bumper","left_trigger","right_trigger",
+  "dpad_up","dpad_down","dpad_left","dpad_right","left_stick_button","right_stick_button",
+  "back","start","options","guide","touchpad","left_stick_x","left_stick_y","right_stick_x","right_stick_y"];
+
+function diffOpModes(A, B){
+  /* Actions per control, as written — and a resolved key so that
+     `claw.setPosition(CLAW_OPEN)` equals `claw.setPosition(0.2)` when it is. */
+  const group=code=>{
+    const g={};
+    const resolve=expr=>{
+      const t=String(expr).trim();
+      if(code.consts[t]!==undefined) return String(+code.consts[t].toFixed(6));
+      if(code.vars[t]!==undefined&&(code.config||[]).some(f=>f.name===t)) return t;
+      if(/^-?\d*\.?\d+$/.test(t)) return String(+parseFloat(t).toFixed(6));
+      return t.replace(/\s+/g,"");
+    };
+    for(const b of code.bindings){
+      const k="gamepad"+b.pad+"."+b.btn;
+      const text=b.assign? b.dev+" "+b.op+" "+b.expr : b.sleep? "sleep("+b.expr+")" : b.dev+"."+b.op+"("+b.expr+")";
+      const key =b.assign? b.dev+b.op+resolve(b.expr) : b.sleep? "sleep"+resolve(b.expr) : b.dev+"."+b.op+"("+resolve(b.expr)+")";
+      const list=(g[k]=g[k]||[]);
+      if(!list.some(x=>x.key===key)) list.push({text,key});
+    }
+    return g;
+  };
+  const ga=group(A), gb=group(B);
+  const rank=k=>{ const m=/^gamepad(\d)\.(\w+)$/.exec(k); const i=CONTROL_ORDER.indexOf(m?m[2]:"");
+    return (m?+m[1]:9)*100+(i<0?99:i); };
+  const keys=[...new Set([...Object.keys(ga),...Object.keys(gb)])].sort((x,y)=>rank(x)-rank(y));
+  const controls=keys.map(k=>{
+    const a=ga[k]||[], b=gb[k]||[];
+    const same=a.length===b.length && a.every(x=>b.some(y=>y.key===x.key));
+    return {control:k, a:a.map(x=>x.text), b:b.map(x=>x.text),
+            status:!a.length?"added":!b.length?"removed":same?"same":"changed"};
+  });
+
+  const names=code=>new Set(code.devices.map(d=>d.name));
+  const na=names(A), nb=names(B);
+  const devices={added:[...nb].filter(x=>!na.has(x)), removed:[...na].filter(x=>!nb.has(x))};
+
+  // class-level values only: constants and the fields FTC Dashboard would expose
+  const values=code=>{
+    const v={};
+    for(const k in code.consts) v[k]=code.consts[k];
+    for(const f of (code.config||[])) if(code.vars[f.name]!==undefined) v[f.name]=code.vars[f.name];
+    return v;
+  };
+  const va=values(A), vb=values(B);
+  const vals=[...new Set([...Object.keys(va),...Object.keys(vb)])].sort()
+    .map(k=>({name:k, a:va[k], b:vb[k]}))
+    .filter(r=>r.a!==r.b);
+
+  const count=s=>controls.filter(c=>c.status===s).length;
+  return {a:{opmode:A.opmode, cls:A.cls}, b:{opmode:B.opmode, cls:B.cls},
+          controls, devices, values:vals,
+          summary:{changed:count("changed"), added:count("added"), removed:count("removed"), same:count("same")}};
 }
 
 // ---- src/analyze.js ----
@@ -1849,10 +2257,11 @@ function analyze(code,cad,map,opts){
   if(!code.kind) add("struct:anno","warn","No OpMode annotation",
     "Nothing marked <code>@TeleOp</code> or <code>@Autonomous</code>, so this class won't appear on the Driver Station list.",null,
     "Add <code>@TeleOp(name = \"…\")</code> above the class.");
-  if(!code.hasLoop) add("struct:loop","fail","No OpMode loop found",
-    "The bench couldn't find a <code>while (opModeIsActive())</code> block or a <code>loop()</code> method, so there is nothing to run.",null,
+  const hasAuto = code.auto && code.auto.length>0;
+  if(!code.hasLoop && !hasAuto) add("struct:loop","fail","Nothing to run after START",
+    "The bench couldn't find a <code>while (opModeIsActive())</code> loop, a <code>loop()</code> method, or any statements after <code>waitForStart()</code>.",null,
     "Check the class structure — everything below is based on whatever it could read.");
-  else if(!code.hasWait&&code.kind==="TeleOp") add("struct:wait","fail","Missing waitForStart()",
+  else if(!code.hasWait&&code.kind==="TeleOp"&&!/void\s+loop\s*\(/.test(code.src||"")) add("struct:wait","fail","Missing waitForStart()",
     "A LinearOpMode that never calls <code>waitForStart()</code> runs its loop during init and is stopped by the SDK.",null,
     "Call <code>waitForStart();</code> before the main loop.");
   if(!code.devices.length) add("struct:dev","warn","No hardware devices found",
@@ -1964,7 +2373,7 @@ headroom  ${ratio.toFixed(2)}×${ratio<1?"  ◄ SHORT":""}`;
     } else if(st.kind==="sleep") sleeps.push({ms:st.ms, on:ctx});
   }})(code.stmts,null);
   if(sleeps.length){
-    const total=sleeps.reduce((s,x)=>s+x.ms,0);
+    const total=sleeps.reduce((s,x)=>s+(x.ms||0),0);
     add("sleep","fail","<code>sleep()</code> inside the loop freezes the whole robot",
       "A LinearOpMode runs one thread. While <code>sleep("+sleeps[0].ms+")</code> is blocking, nothing else in the loop runs &mdash; "+
       "the drivetrain keeps its last power, no other button is read, and the PID loops stop updating. "+
@@ -2073,9 +2482,22 @@ headroom  ${ratio.toFixed(2)}×${ratio<1?"  ◄ SHORT":""}`;
   }
 
   const cfgs=code.devices.filter(d=>d.cfg).map(d=>'"'+d.cfg+'"');
-  if(cfgs.length) add("cfg","info","Config names still need checking by hand",
-    "This OpMode asks the Robot Controller for "+cfgs.join(", ")+". No CAD file can confirm those.",null,
-    "Open the config on the Driver Station and read the names back.");
+  if(opts.robotConfig) checkRobotConfig(code,opts.robotConfig).forEach(f=>F.push(f));
+  else if(cfgs.length) add("cfg","info","Config names aren't checked yet",
+    "This OpMode asks the Robot Controller for "+cfgs.join(", ")+". No CAD file can confirm those — but the robot's configuration file can.",null,
+    "Load the configuration <code>.xml</code> from the Robot Controller (the <code>FIRST</code> folder on the Control Hub) and every name is checked exactly.");
+
+  // ---- what the interpreter had to skip
+  const cov=coverage(code);
+  if(cov.skipped.length){
+    const byWhy={};
+    cov.skipped.forEach(s=>{ (byWhy[s.why]=byWhy[s.why]||[]).push(s); });
+    add("coverage","info",cov.skipped.length+" line"+(cov.skipped.length>1?"s":"")+" the bench can't simulate",
+      "It ran <b>"+cov.understood+" of "+cov.total+"</b> statements. The rest are skipped, not guessed at &mdash; if one of them moves the robot, the bench won't show it.",
+      cov.skipped.slice(0,12).map(s=>("line "+(s.line||"?")).padEnd(9)+String(s.text).slice(0,46).padEnd(48)+s.why).join("\n")+
+        (cov.skipped.length>12?"\n… and "+(cov.skipped.length-12)+" more":""),
+      null);
+  }
 
   const order={fail:0,warn:1,pass:2,info:3};
   F.sort((a,b)=>order[a.sev]-order[b.sev]);
@@ -2092,30 +2514,58 @@ function restPosOf(code,devName){
 // ---- src/sim.js ----
 /* ============================================================
    7.  SIMULATION  — interprets the statement tree
+   Mirrors the Driver Station: load an OpMode, INIT runs everything
+   before waitForStart(), START runs the loop (TeleOp) or steps the
+   sequence (Autonomous), STOP halts motors.
    ============================================================ */
 const Sim={
-  dev:{}, vars:{}, pad:{1:{},2:{}}, t:0, chassis:{x:0,y:0,h:0},
-  reset(code,cad,map,opts){
-    this.dev={}; this.vars={}; this.t=0; this.chassis={x:0,y:0,h:0};
+  dev:{}, vars:{}, pad:{1:{},2:{}}, t:0, chassis:{x:0,y:0,h:0}, phase:"empty",
+
+  /* Build devices and state for an OpMode. Nothing runs yet. */
+  load(code,cad,map,opts){
+    this.dev={}; this.vars={}; this.t=0; this.pids={}; this.timers={};
+    const sp=(opts&&opts.startPose)||{x:0,y:0,h:0};
+    this.chassis={x:sp.x,y:sp.y,h:sp.h};
     this.code=code; this.cad=cad; this.map=map; this.opts=opts;
+    this.pc=0; this.sleepEnd=null; this.sleptMs=0; this.autoDone=false;
     for(const d of code.devices){
       const mech=cad.mechs.filter(m=>m.id===map[d.name])[0]||null;
       const spec=specFor(d,mech,opts.trust);
       const isMotor=spec.kind==="motor"||spec.kind==="crservo";
       this.dev[d.name]={kind:isMotor?"motor":"servo", mech, spec,
         cmd:isMotor?0:0.5, act:isMotor?0:0.5, revs:0, ticks:0, stalled:false,
-        reversed:false,
+        reversed:false, mode:"run", target:0,
         tpr: 28*(spec.ratio||19.2),        // goBILDA: 28 counts per motor rev
         restPos:restPosOf(code,d.name),
         sec60:spec.sec60||0.18, travelDeg:travelDegOf(spec)};
     }
-    this.pids={};
     for(const v in code.vars) this.vars[v]=code.vars[v];
+    for(const n of (code.timers||[])) this.timers[n]=0;
     this.dt=0.02;
-    this.exec(code.inits,this.env());          // directions, PID objects, start positions
-    for(const n in this.dev){ const s=this.dev[n]; s.act=s.cmd; }
     this.drivetrain=detectDrivetrain(code);
+    this.phase="loaded";
   },
+  /* INIT: everything before waitForStart() — directions, PID objects, start positions. */
+  init(){
+    if(!this.code) return;
+    this.exec(this.code.inits||[],this.env());
+    for(const n in this.dev){ const s=this.dev[n]; if(s.kind==="servo") s.act=s.cmd; }
+    this.phase="init";
+  },
+  start(){
+    if(!this.code) return;
+    if(this.phase==="loaded") this.init();
+    this.t=0; this.pc=0; this.sleepEnd=null; this.autoDone=false;
+    for(const n in this.timers) this.timers[n]=0;
+    this.phase="running";
+  },
+  stop(){
+    for(const n in this.dev){ const s=this.dev[n]; if(s.kind==="motor"){ s.cmd=0; s.mode="run"; } }
+    this.phase="stopped";
+  },
+  /* One call from load to running — what the tests and headless runs use. */
+  reset(code,cad,map,opts){ this.load(code,cad,map,opts); this.init(); this.start(); },
+
   /* ---- PID objects the OpMode constructs (ftclib, RoadRunner, hand-rolled) ---- */
   pidOp(name,meth,a){
     const st=this.pids[name]||(this.pids[name]={p:0,i:0,d:0,sum:0,prev:null});
@@ -2150,12 +2600,21 @@ const Sim={
       device(name,meth){
         const s=self.dev[name]; if(!s) return 0;
         if(meth==="getCurrentPosition") return Math.round(s.ticks);
+        if(meth==="getTargetPosition") return s.target;
         if(meth==="getPosition") return s.cmd;
         if(meth==="getPower") return s.cmd;
         if(meth==="getVelocity") return (s.spec.rpm||300)*s.act*s.tpr/60;
+        if(meth==="isBusy") return (s.mode==="rtp"&&Math.abs(s.target-s.ticks)>10)?1:0;
         return 0;
       },
       pid(name,meth,a){ return self.pidOp(name,meth,a); },
+      timer(name,unit){
+        if(self.timers[name]===undefined) return 0;
+        const s=self.t-self.timers[name];
+        return unit==="milliseconds"?s*1000 : unit==="nanoseconds"?s*1e9 : s;
+      },
+      runtime(){ return self.t; },
+      active(){ return self.phase==="running"?1:0; },
       pad(ref){
         const r=splitPadRef(ref); if(!r) return 0;
         const st=self.pad[r.pad]||{};
@@ -2188,27 +2647,74 @@ const Sim={
         const a=st.args.map(x=>evalNode(x,env));
         this.pidOp(st.obj,"setPID",a);
       }else if(st.kind==="sleep"){
-        this.sleptMs=(this.sleptMs||0)+st.ms;      // flagged, not simulated
+        // inside a TeleOp loop a sleep blocks the robot; the analysis reports it
+        this.sleptMs=(this.sleptMs||0)+(st.ast?evalNode(st.ast,env):(st.ms||0));
       }else if(st.kind==="objcall"){
         const s=this.dev[st.obj];
-        if(s&&st.meth==="setDirection") s.reversed=/REVERSE/i.test(st.raw||"");
-        else if(s&&st.meth==="setMode"&&/STOP_AND_RESET_ENCODER/i.test(st.raw||"")){ s.ticks=0; s.revs=0; }
+        if(this.timers[st.obj]!==undefined){ if(st.meth==="reset") this.timers[st.obj]=this.t; }
+        else if(s&&st.meth==="setDirection") s.reversed=/REVERSE/i.test(st.raw||"");
+        else if(s&&st.meth==="setTargetPosition") s.target=evalNode(st.args[0],env);
+        else if(s&&st.meth==="setMode"){
+          const raw=st.raw||"";
+          if(/STOP_AND_RESET_ENCODER/.test(raw)){ s.ticks=0; s.revs=0; s.cmd=0; }
+          else if(/RUN_TO_POSITION/.test(raw)) s.mode="rtp";
+          else if(/RUN_USING_ENCODER|RUN_WITHOUT_ENCODER/.test(raw)) s.mode="run";
+        }
         else if(/^set(PID|PIDF|P|I|D)$|^reset$/.test(st.meth) && !s)
           this.pidOp(st.obj,st.meth,st.args.map(x=>evalNode(x,env)));
         else if(st.meth==="resetYaw") this.chassis.h=0;
       }
+      // "while" and "unknown" nodes only mean something to the autonomous stepper
     }
   },
+  /* Autonomous: run statements in order. sleep() and wait loops hold the
+     program counter while simulated time passes, exactly as they hold the
+     real OpMode thread. */
+  stepAuto(){
+    const prog=this.code.auto||[]; const env=this.env();
+    for(let guard=0; this.pc<prog.length && guard<500; guard++){
+      const st=prog[this.pc];
+      if(st.kind==="sleep"){
+        if(this.sleepEnd==null){
+          const ms=st.ast?evalNode(st.ast,env):(st.ms||0);
+          this.sleepEnd=this.t+Math.max(0,ms)/1000;
+        }
+        if(this.t<this.sleepEnd) return;
+        this.sleepEnd=null; this.pc++; continue;
+      }
+      if(st.kind==="while"){
+        if(evalNode(st.condAst,env)){ this.exec(st.body,env); return; }   // one pass per tick
+        this.pc++; continue;
+      }
+      this.exec([st],env); this.pc++;
+    }
+    if(this.pc>=prog.length) this.autoDone=true;
+  },
   tick(dt){
-    if(!this.code) return;
-    this.t+=dt; this.dt=dt;
-    this.exec(this.code.stmts,this.env());
+    if(!this.code||this.phase==="empty") return;
+    this.dt=dt;
+    if(this.phase==="running"){
+      this.t+=dt;
+      if(this.code.hasLoop) this.exec(this.code.stmts,this.env());
+      else if(this.code.auto&&this.code.auto.length) this.stepAuto();
+    }
 
     for(const name in this.dev){
       const s=this.dev[name];
       if(s.kind==="motor"){
-        const slew=8*dt;
-        s.act += Math.sign(s.cmd-s.act)*Math.min(Math.abs(s.cmd-s.act),slew);
+        let drive=s.cmd;
+        if(s.mode==="rtp"){
+          /* RUN_TO_POSITION: the hub's own loop, capped by the commanded power.
+             Start slowing inside the distance the motor needs to stop from that
+             power — a fixed small band overshoots badly at speed. */
+          const err=s.target-s.ticks;
+          const perSec=(s.spec.rpm||300)/60*s.tpr;           // ticks/s at full power
+          const stop=Math.abs(s.cmd)*Math.abs(s.cmd)*perSec/(2*SLEW);
+          const band=Math.max(8,1.8*stop);
+          drive=Math.abs(s.cmd)*Math.max(-1,Math.min(1,err/band));
+        }
+        const slew=SLEW*dt;
+        s.act += Math.sign(drive-s.act)*Math.min(Math.abs(drive-s.act),slew);
         const rpm=(s.spec.rpm||300)*s.act;
         s.revs += rpm/60*dt;
         s.ticks = s.revs*s.tpr;                 // what getCurrentPosition() reads
@@ -2233,7 +2739,7 @@ const Sim={
   driveChassis(dt){
     const dtn=this.drivetrain;
     if(!dtn||!dtn.ok){ return; }
-    let L=0,R=0,nl=0,nr=0,strafe=0,ns=0;
+    let L=0,R=0,nl=0,nr=0,strafe=0;
     for(const w of dtn.wheels){
       const s=this.dev[w.dev]; if(!s) continue;
       if(w.left){ L+=s.act; nl++; } else if(w.right){ R+=s.act; nr++; }
@@ -2243,7 +2749,7 @@ const Sim={
       // strafe shows up as front/back disagreement on the same side
       const lf=this.dev[(dtn.wheels.filter(w=>w.left&&w.front)[0]||{}).dev];
       const lb=this.dev[(dtn.wheels.filter(w=>w.left&&w.back)[0]||{}).dev];
-      if(lf&&lb){ strafe=(lf.act-lb.act)/2; ns=1; }
+      if(lf&&lb) strafe=(lf.act-lb.act)/2;
     }
     const SPEED=1.15, TURN=3.4;               // m/s and rad/s at full power
     const v=(L+R)/2*SPEED, w=(R-L)/2*TURN;
@@ -2256,6 +2762,7 @@ const Sim={
   }
 };
 const clamp01=v=>Math.max(0,Math.min(1,v));
+const SLEW=8;                                   // motor power change per second (power units / s)
 
 // ---- src/view3d.js ----
 /* ============================================================

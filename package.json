@@ -6,6 +6,6 @@
   "license": "MIT",
   "scripts": {
     "build": "node tools/build.mjs",
-    "test": "node --test tests/engine.test.mjs"
+    "test": "node --test tests/engine.test.mjs tests/features.test.mjs"
   }
 }

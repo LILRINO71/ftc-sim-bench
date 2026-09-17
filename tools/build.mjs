@@ -13,7 +13,7 @@ const rd = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 
 // Concatenation order matters: later files use functions and constants the
 // earlier ones define. The engine never touches the DOM; only view3d and app do.
-export const ORDER = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'analyze', 'sim', 'view3d', 'app'];
+export const ORDER = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'robotconfig', 'compare', 'analyze', 'sim', 'view3d', 'app'];
 
 // An inline script must never contain a literal closing script tag.
 const safe = (s) => s.replace(/<\/(script)/gi, '<\\/$1');
