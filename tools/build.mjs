@@ -28,6 +28,8 @@ const fragment = [
   '<link rel="preconnect" href="https://fonts.googleapis.com">',
   '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">',
+  // set the saved theme before anything paints, so there's no light flash
+  `<script>try{document.documentElement.setAttribute("data-theme",localStorage.getItem("ftcbench.theme")==="light"?"light":"dark")}catch(e){document.documentElement.setAttribute("data-theme","dark")}</script>`,
   '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>',
   `<style>\n${css}</style>`,
   markup,

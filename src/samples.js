@@ -116,7 +116,6 @@ import com.qualcomm.robotcore.hardware.Servo;
 @TeleOp(name = "Mecanum Drive + Lift")
 public class MecanumTeleOp extends LinearOpMode {
 
-    // Yellow Jacket drive motors
     DcMotor leftFront;
     DcMotor rightFront;
     DcMotor leftBack;
@@ -202,21 +201,18 @@ public class TimedDriveAuto extends LinearOpMode {
         waitForStart();
         runtime.reset();
 
-        // drive forward
         leftFront.setPower(DRIVE);
         rightFront.setPower(DRIVE);
         leftBack.setPower(DRIVE);
         rightBack.setPower(DRIVE);
         sleep(1200);
 
-        // turn right in place
         leftFront.setPower(TURN);
         leftBack.setPower(TURN);
         rightFront.setPower(-TURN);
         rightBack.setPower(-TURN);
         sleep(700);
 
-        // stop and raise the lift
         leftFront.setPower(0);
         rightFront.setPower(0);
         leftBack.setPower(0);
@@ -224,7 +220,6 @@ public class TimedDriveAuto extends LinearOpMode {
         lift.setPosition(0.75);
         sleep(800);
 
-        // creep backwards until five seconds have passed
         while (opModeIsActive() && runtime.seconds() < 5.0) {
             leftFront.setPower(-0.3);
             rightFront.setPower(-0.3);

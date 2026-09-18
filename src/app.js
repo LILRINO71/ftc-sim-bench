@@ -2,15 +2,188 @@
    9.  UI
    ============================================================ */
 const $=s=>document.querySelector(s);
-let CODE=null, CAD=null, MAP={}, FINDINGS=[], activePad=2;
-const OPTS={payloadKg:0.180, duty:0.30, trust:"code"};
-let IGNORED={};
-try{ IGNORED=JSON.parse(localStorage.getItem("ftcbench.ignored")||"{}")||{}; }catch(e){ IGNORED={}; }
-function saveIgnored(){ try{ localStorage.setItem("ftcbench.ignored",JSON.stringify(IGNORED)); }catch(e){} }
-
+const $$=s=>Array.prototype.slice.call(document.querySelectorAll(s));
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+const store={
+  get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
 
-/* ---------- gamepad ---------- */
+let CODE=null, CAD=null, MAP={}, FINDINGS=[], activePad=2;
+const OPTS={payloadKg:0.180, duty:0.30, trust:"code", robotConfig:null};
+let IGNORED={};
+try{ IGNORED=JSON.parse(store.get("ftcbench.ignored","{}"))||{}; }catch(e){ IGNORED={}; }
+function saveIgnored(){ store.set("ftcbench.ignored",JSON.stringify(IGNORED)); }
+let LIBRARY=[], CURRENT_ID=null;
+let ROBOT_CFG_NAME=null;
+let CONFIG_OVR={};                 // live-edited config variables, like FTC Dashboard
+let RIG_DEVICES={};                // device → mechanism, remembered across OpModes
+
+/* ============================================================
+   TABS
+   ============================================================ */
+function initTabs(){
+  $$(".tabs").forEach(nav=>{
+    nav.addEventListener("click",e=>{ const b=e.target.closest("button[data-tab]"); if(b) selectTab(nav,b.dataset.tab); });
+    nav.addEventListener("keydown",e=>{
+      if(e.key!=="ArrowRight"&&e.key!=="ArrowLeft") return;
+      const tabs=[].slice.call(nav.querySelectorAll("button[data-tab]"));
+      const i=tabs.indexOf(document.activeElement); if(i<0) return;
+      const n=tabs[(i+(e.key==="ArrowRight"?1:tabs.length-1))%tabs.length];
+      n.focus(); selectTab(nav,n.dataset.tab); e.preventDefault();
+    });
+    const saved=store.get("ftcbench.tab."+nav.dataset.tabs,null);
+    if(saved&&nav.querySelector(`button[data-tab="${saved}"]`)) selectTab(nav,saved);
+  });
+}
+function selectTab(nav,tab){
+  nav.querySelectorAll("button[data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===tab)));
+  nav.parentElement.querySelectorAll(".pane").forEach(p=>{ p.hidden=p.dataset.pane!==tab; });
+  store.set("ftcbench.tab."+nav.dataset.tabs,tab);
+  if(tab==="graph") Graph.draw();
+  if(tab==="compare") renderCompare();
+}
+const paneVisible=name=>{ const p=document.querySelector(`.pane[data-pane="${name}"]`); return p&&!p.hidden; };
+
+/* ============================================================
+   OPMODE LIBRARY
+   ============================================================ */
+function entry(id){ return LIBRARY.filter(e=>e.id===id)[0]||null; }
+function parseEntry(e){
+  try{ e.code=parseJava(e.source); e.error=null; }
+  catch(err){ e.code=null; e.error=err.message; }
+  return e;
+}
+function initLibrary(){
+  LIBRARY=[
+    {id:"sample-claw", file:"WORKSHOPCODE.java", source:SAMPLE_JAVA, builtin:true},
+    {id:"sample-mecanum", file:"MecanumTeleOp.java", source:DRIVE_JAVA, builtin:true},
+    {id:"sample-auto", file:"TimedDriveAuto.java", source:AUTO_JAVA, builtin:true}
+  ];
+  try{
+    const saved=JSON.parse(store.get("ftcbench.library","[]"))||[];
+    for(const s of saved) if(s&&s.id&&s.source) LIBRARY.push({id:s.id, file:s.file||"OpMode.java", source:s.source, builtin:false});
+  }catch(e){}
+  LIBRARY.forEach(parseEntry);
+}
+function saveLibrary(){
+  store.set("ftcbench.library",JSON.stringify(LIBRARY.filter(e=>!e.builtin).map(e=>({id:e.id,file:e.file,source:e.source}))));
+}
+const opName=e=> e.code&&e.code.opmode ? e.code.opmode : e.file.replace(/\.java$/,"");
+const opKind=e=> e.code&&e.code.kind==="Autonomous" ? "Auto" : "TeleOp";
+
+function renderOpList(){
+  $("#opList").innerHTML=LIBRARY.map(e=>`
+    <div class="oprow${e.id===CURRENT_ID?" on":""}" data-op="${esc(e.id)}" tabindex="0" role="button" aria-pressed="${e.id===CURRENT_ID}">
+      <span class="kind${opKind(e)==="Auto"?" auto":""}">${opKind(e)}</span>
+      <div><div class="on-name">${esc(opName(e))}</div><div class="on-file">${esc(e.file)}${e.builtin?" · sample":""}</div></div>
+      ${e.builtin?"<span></span>":`<button class="rm" data-oprm="${esc(e.id)}" title="Remove ${esc(e.file)}" aria-label="Remove ${esc(e.file)}">×</button>`}
+    </div>`).join("");
+  $$("#opList [data-op]").forEach(r=>{
+    const go=()=>{ if(r.dataset.op!==CURRENT_ID) selectOpMode(r.dataset.op); };
+    r.addEventListener("click",e=>{ if(!e.target.closest("[data-oprm]")) go(); });
+    r.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } });
+  });
+  $$("#opList [data-oprm]").forEach(b=>b.addEventListener("click",()=>{
+    const id=b.dataset.oprm;
+    LIBRARY=LIBRARY.filter(e=>e.id!==id); saveLibrary();
+    if(id===CURRENT_ID) selectOpMode(LIBRARY[0].id); else { renderOpList(); renderOpSelect(); renderCompareSelects(); }
+  }));
+}
+function renderOpSelect(){
+  const group=(k,label)=>{
+    const items=LIBRARY.filter(e=>opKind(e)===k);
+    return items.length?`<optgroup label="${label}">`+items.map(e=>
+      `<option value="${esc(e.id)}"${e.id===CURRENT_ID?" selected":""}>${esc(opName(e))}</option>`).join("")+`</optgroup>`:"";
+  };
+  $("#opSelect").innerHTML=group("TeleOp","TeleOp")+group("Auto","Autonomous");
+  const e=entry(CURRENT_ID);
+  const k=$("#opKind"); k.textContent=e?opKind(e):"—"; k.className="kind"+(e&&opKind(e)==="Auto"?" auto":"");
+}
+
+function selectOpMode(id){
+  const e=entry(id); if(!e) return;
+  if(Sim.phase==="running") Sim.stop();
+  CURRENT_ID=id; store.set("ftcbench.current",id);
+  $("#srcbox").value=e.source; $("#srcName").textContent=e.file;
+  CONFIG_OVR={};
+  if(!e.code){
+    CODE=null;
+    $("#coverage").innerHTML=`<p class="cov-ok">Couldn't read this file: ${esc(e.error||"unknown error")}</p>`;
+    renderOpList(); renderOpSelect(); return;
+  }
+  CODE=e.code;
+  MAP=autoMap(CODE.devices,CAD.mechs);
+  applyDeviceMemory();
+  analyzeAll();
+  Sim.load(CODE,CAD,MAP,withPose());
+  applyConfigOverrides(); Sim.init(); applyConfigOverrides();    // like a DS: selected and INIT'd, waiting for START
+  buildGauges(); renderPad(); Graph.reset(); renderConfigVars(); renderLegend3D();
+  renderOpList(); renderOpSelect(); renderCompareSelects(); updateDS();
+}
+function addOpModeFromText(file,text){
+  const existing=LIBRARY.filter(x=>!x.builtin&&x.file===file)[0];
+  const e=existing||{id:"u"+Date.now().toString(36)+Math.random().toString(36).slice(2,6), file, builtin:false};
+  e.source=text; parseEntry(e);
+  if(!existing) LIBRARY.push(e);
+  saveLibrary(); selectOpMode(e.id);
+}
+
+/* ============================================================
+   DRIVER STATION
+   ============================================================ */
+const PERIOD={TeleOp:120, Autonomous:30};
+function withPose(){ OPTS.startPose=Object.assign({x:0,y:0,h:0},Sim.chassis||{}); return OPTS; }
+function applyConfigOverrides(){ for(const k in CONFIG_OVR) Sim.vars[k]=CONFIG_OVR[k]; }
+function dsInit(){
+  if(!CODE||Sim.phase==="running") return;
+  Sim.load(CODE,CAD,MAP,withPose());
+  applyConfigOverrides(); Sim.init(); applyConfigOverrides();
+  buildGauges(); Graph.reset(); updateDS();
+}
+function dsStart(){
+  if(!CODE) return;
+  if(Sim.phase!=="init") dsInit();
+  Sim.start(); updateDS();
+}
+function dsStop(){ Sim.stop(); updateDS(); }
+function updateDS(){
+  const ph=Sim.phase;
+  const bi=$("#btnInit"), bs=$("#btnStart"), bx=$("#btnStop");
+  bi.disabled=!(ph==="loaded"||ph==="stopped");
+  bs.disabled=ph!=="init";
+  bx.disabled=!(ph==="init"||ph==="running");
+  bi.classList.toggle("next",!bi.disabled);
+  bs.classList.toggle("next",!bs.disabled);
+  bx.classList.toggle("live",ph==="running");
+  const P={loaded:["Ready — press INIT",""],init:["INIT — waiting for START","accentp"],
+           running:["Running","live"],stopped:["Stopped",""],empty:["No OpMode",""]}[ph]||["—",""];
+  const pill=$("#phasePill"); pill.textContent=P[0]; pill.className="pill "+P[1];
+  const hint=$("#vpHint");
+  if(!CODE){ hint.hidden=true; }
+  else if(ph==="init"){ hint.hidden=false; hint.innerHTML=`Press START to run “${esc(CODE.opmode||"OpMode")}”<small>INIT already ran everything before waitForStart()</small>`; }
+  else if(ph==="loaded"||ph==="stopped"){ hint.hidden=false; hint.innerHTML=`Press INIT<small>${ph==="stopped"?"then START to run it again":"to run the setup code"}</small>`; }
+  else hint.hidden=true;
+  updateClock();
+}
+const clockText=s=>{ s=Math.max(0,s); return Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,"0"); };
+function updateClock(){
+  const kind=CODE&&CODE.kind==="Autonomous"?"Autonomous":"TeleOp";
+  const P=PERIOD[kind], practice=$("#practice").checked;
+  const t=(Sim.phase==="running"||Sim.phase==="stopped")?Sim.t:0;
+  const c=$("#dsClock");
+  if(practice){ c.textContent=clockText(t); $("#dsBar").style.width="0"; c.classList.remove("low"); return; }
+  const rem=P-t;
+  c.textContent=clockText(Math.ceil(rem-1e-6));
+  $("#dsBar").style.width=Math.min(100,t/P*100).toFixed(1)+"%";
+  c.classList.toggle("low",Sim.phase==="running"&&rem<=10);
+  if(Sim.phase==="running"&&rem<=0) dsStop();          // the match period ended
+}
+
+/* ============================================================
+   GAMEPAD
+   ============================================================ */
 const PAD_GEO=[
   {id:"left_bumper", x:78,  y:26, w:62, h:17, r:8,  t:"LB"},
   {id:"right_bumper",x:288, y:26, w:62, h:17, r:8,  t:"RB"},
@@ -27,8 +200,8 @@ const PAD_GEO=[
   {id:"back",  x:176, y:80, w:26, h:13, r:6, t:"BK"},
   {id:"start", x:226, y:80, w:26, h:13, r:6, t:"ST"}
 ];
-const STICKS=[{id:"left", cx:160, cy:141, r:22, ax:"left_stick_x", ay:"left_stick_y", t:"LS"},
-              {id:"right",cx:266, cy:141, r:22, ax:"right_stick_x",ay:"right_stick_y",t:"RS"}];
+const STICKS=[{id:"left", cx:160, cy:141, r:22, ax:"left_stick_x", ay:"left_stick_y", t:"LS", btn:"left_stick_button"},
+              {id:"right",cx:266, cy:141, r:22, ax:"right_stick_x",ay:"right_stick_y",t:"RS", btn:"right_stick_button"}];
 
 function boundMap(){
   const b={};
@@ -38,16 +211,22 @@ function boundMap(){
   }
   return b;
 }
+function actionText(b){
+  if(b.assign) return `${b.dev} ${b.op} ${b.expr}`;
+  if(b.sleep) return `sleep(${b.expr})`;
+  return `${b.dev}.${b.op}(${b.expr})`;
+}
+function describe(bds){
+  const list=Array.isArray(bds)?bds:[bds]; const seen={};
+  return list.map(b=>{ const t=actionText(b); if(seen[t]) return null; seen[t]=1; return t; }).filter(Boolean).join("  ·  ");
+}
 function renderPad(){
   const bound=boundMap();
   let s=`<svg class="padsvg" viewBox="0 0 428 194" role="group" aria-label="Virtual FTC gamepad ${activePad}">`;
-  s+=`<path class="shell" d="M60 60 Q60 34 92 34 L336 34 Q368 34 368 60 L368 96
-      Q368 134 340 152 Q318 166 300 148 L272 120 L156 120 L128 148
-      Q110 166 88 152 Q60 134 60 96 Z"/>`;
+  s+=`<path class="shell" d="M60 60 Q60 34 92 34 L336 34 Q368 34 368 60 L368 96 Q368 134 340 152 Q318 166 300 148 L272 120 L156 120 L128 148 Q110 166 88 152 Q60 134 60 96 Z"/>`;
   s+=`<text class="cap" x="214" y="60">gamepad${activePad}</text>`;
   for(const g of PAD_GEO){
-    const bd=bound[g.id];
-    const cls="btn"+(bd?" bound":"");
+    const bd=bound[g.id], cls="btn"+(bd?" bound":"");
     const aria=bd?`${g.t}: ${describe(bd)}`:`${g.t}: unbound`;
     if(g.cx!==undefined){
       s+=`<circle class="${cls}" data-btn="${g.id}" cx="${g.cx}" cy="${g.cy}" r="${g.r}" tabindex="0" role="button" aria-label="${esc(aria)}"><title>${esc(aria)}</title></circle>`;
@@ -58,7 +237,7 @@ function renderPad(){
     }
   }
   for(const k of STICKS){
-    const bd=bound[k.ax]||bound[k.ay];
+    const bd=bound[k.ax]||bound[k.ay]||bound[k.btn];
     const aria=bd?`${k.t} stick: ${describe(bd)}`:`${k.t} stick: unbound`;
     s+=`<circle class="stickwell${bd?" bound":""}" data-stick="${k.id}" cx="${k.cx}" cy="${k.cy}" r="${k.r}" tabindex="0" role="slider" aria-label="${esc(aria)}"><title>${esc(aria)}</title></circle>`;
     s+=`<circle class="stickknob" data-knob="${k.id}" cx="${k.cx}" cy="${k.cy}" r="7"/>`;
@@ -67,251 +246,222 @@ function renderPad(){
   s+=`</svg>`;
   $("#padwrap").innerHTML=s;
 
-  $("#padwrap").querySelectorAll("[data-btn]").forEach(el=>{
+  $$("#padwrap [data-btn]").forEach(el=>{
     const b=el.dataset.btn;
     const dn=e=>{ if(e.cancelable) e.preventDefault(); Sim.pad[activePad][b]=true; el.classList.add("down"); };
     const up=()=>{ Sim.pad[activePad][b]=false; el.classList.remove("down"); };
-    el.addEventListener("pointerdown",dn);
-    el.addEventListener("pointerup",up);
-    el.addEventListener("pointerleave",up);
+    el.addEventListener("pointerdown",dn); el.addEventListener("pointerup",up); el.addEventListener("pointerleave",up);
     el.addEventListener("keydown",e=>{ if(e.key===" "||e.key==="Enter") dn(e); });
     el.addEventListener("keyup",e=>{ if(e.key===" "||e.key==="Enter") up(); });
   });
   STICKS.forEach(k=>{
-    const well=$(`[data-stick="${k.id}"]`), knob=$(`[data-knob="${k.id}"]`);
-    if(!well) return;
+    const well=$(`[data-stick="${k.id}"]`), knob=$(`[data-knob="${k.id}"]`); if(!well) return;
     let dragging=false;
     const set=(dx,dy)=>{
       const L=Math.hypot(dx,dy), max=k.r-7;
       if(L>max){ dx*=max/L; dy*=max/L; }
       knob.setAttribute("cx",k.cx+dx); knob.setAttribute("cy",k.cy+dy);
-      Sim.pad[activePad][k.ax]= +(dx/max).toFixed(3);
-      Sim.pad[activePad][k.ay]= +(dy/max).toFixed(3);   // down is positive, as on a real pad
+      Sim.pad[activePad][k.ax]=+(dx/max).toFixed(3);
+      Sim.pad[activePad][k.ay]=+(dy/max).toFixed(3);   // down is positive, as on a real pad
     };
     const rel=()=>{ dragging=false; knob.setAttribute("cx",k.cx); knob.setAttribute("cy",k.cy);
       Sim.pad[activePad][k.ax]=0; Sim.pad[activePad][k.ay]=0; };
-    const toLocal=e=>{
-      const svg=$("#padwrap svg"); const r=svg.getBoundingClientRect();
-      const sx=428/r.width, sy=194/r.height;
-      return [(e.clientX-r.left)*sx-k.cx, (e.clientY-r.top)*sy-k.cy];
-    };
-    well.addEventListener("pointerdown",e=>{ dragging=true; well.setPointerCapture(e.pointerId);
-      const p=toLocal(e); set(p[0],p[1]); });
+    const toLocal=e=>{ const r=$("#padwrap svg").getBoundingClientRect();
+      return [(e.clientX-r.left)*428/r.width-k.cx, (e.clientY-r.top)*194/r.height-k.cy]; };
+    well.addEventListener("pointerdown",e=>{ dragging=true; well.setPointerCapture(e.pointerId); const p=toLocal(e); set(p[0],p[1]); });
     well.addEventListener("pointermove",e=>{ if(!dragging) return; const p=toLocal(e); set(p[0],p[1]); });
-    well.addEventListener("pointerup",rel);
-    well.addEventListener("pointercancel",rel);
+    well.addEventListener("pointerup",rel); well.addEventListener("pointercancel",rel);
     well.addEventListener("keydown",e=>{
-      const s=0.5; let dx=0,dy=0;
-      if(e.key==="ArrowLeft")dx=-s; else if(e.key==="ArrowRight")dx=s;
-      else if(e.key==="ArrowUp")dy=-s; else if(e.key==="ArrowDown")dy=s; else return;
+      const v=0.5; let dx=0,dy=0;
+      if(e.key==="ArrowLeft")dx=-v; else if(e.key==="ArrowRight")dx=v; else if(e.key==="ArrowUp")dy=-v; else if(e.key==="ArrowDown")dy=v; else return;
       e.preventDefault(); set(dx*(k.r-7),dy*(k.r-7));
     });
     well.addEventListener("blur",rel);
   });
   renderBindList();
 }
-function describe(bds){
-  const list=Array.isArray(bds)?bds:[bds];
-  const seen={};
-  return list.map(b=>{
-    const key=b.dev+b.op+b.expr; if(seen[key]) return null; seen[key]=1;
-    return b.assign ? `${b.dev} ${b.op} ${b.expr}` : `${b.dev}.${b.op}(${b.expr})`;
-  }).filter(Boolean).join("  ·  ");
-}
+const CONTROL_LABEL=btn=>btn.replace(/^dpad_/,"D-").replace(/left_bumper/,"LB").replace(/right_bumper/,"RB")
+  .replace(/left_trigger/,"LT").replace(/right_trigger/,"RT").replace(/left_stick_button/,"LS BTN").replace(/right_stick_button/,"RS BTN")
+  .replace(/left_stick_/,"LS ").replace(/right_stick_/,"RS ").replace(/_/g," ").toUpperCase();
 function renderBindList(){
   if(!CODE){ $("#bindlist").innerHTML=""; return; }
   const bs=CODE.bindings.filter(b=>b.pad===activePad);
-  if(!bs.length){ $("#bindlist").innerHTML=
-    `<div class="bindrow"><span class="bk">—</span><span class="bd" style="color:var(--tx-3)">Nothing on gamepad${activePad} in this OpMode.</span></div>`; return; }
-  const byBtn={};
-  for(const b of bs) (byBtn[b.btn]=byBtn[b.btn]||[]).push(b);
-  $("#bindlist").innerHTML=Object.keys(byBtn).map(btn=>{
-    const g=byBtn[btn];
-    const label=btn.replace(/^dpad_/,"D-").replace(/left_bumper/,"LB").replace(/right_bumper/,"RB")
-                   .replace(/left_trigger/,"LT").replace(/right_trigger/,"RT")
-                   .replace(/left_stick_/,"LS ").replace(/right_stick_/,"RS ")
-                   .replace(/_/g," ").toUpperCase();
-    const analog=g[0].analog;
-    return `<div class="bindrow" data-btn="${btn}">
-      <span class="bk">${esc(label.slice(0,7))}</span>
-      <span class="bd"><b>${esc(describe(g))}</b>
-      <span class="edge">${analog?"analog — follows the stick":(g[0].cond?"when "+esc(g[0].cond.trim().slice(0,52)):"while held")}</span></span></div>`;
-  }).join("");
+  if(!bs.length){ $("#bindlist").innerHTML=`<div class="bindrow"><span class="bk">—</span><span class="bd"><span class="edge">Nothing on gamepad${activePad} in this OpMode.</span></span></div>`; return; }
+  const byBtn={}; for(const b of bs) (byBtn[b.btn]=byBtn[b.btn]||[]).push(b);
+  $("#bindlist").innerHTML=Object.keys(byBtn).sort((x,y)=>{
+      const i=CONTROL_ORDER.indexOf(x), j=CONTROL_ORDER.indexOf(y); return (i<0?99:i)-(j<0?99:j); })
+    .map(btn=>{
+      const g=byBtn[btn];
+      return `<div class="bindrow" data-btn="${btn}">
+        <span class="bk">${esc(CONTROL_LABEL(btn).slice(0,7))}</span>
+        <span class="bd">${esc(describe(g))}
+        <span class="edge">${g[0].analog?"analog — follows the stick":(g[0].cond?"when "+esc(g[0].cond.trim().slice(0,52)):"while held")}</span></span></div>`;
+    }).join("");
 }
 
-/* ---------- gauges ---------- */
+/* ============================================================
+   ACTUATOR GAUGES
+   ============================================================ */
 const ARC_R=34, ARC_A0=Math.PI*0.78, ARC_A1=Math.PI*2.22;
 function arcPath(t0,t1){
   const a0=ARC_A0+(ARC_A1-ARC_A0)*t0, a1=ARC_A0+(ARC_A1-ARC_A0)*t1;
-  const x0=48+ARC_R*Math.cos(a0), y0=44+ARC_R*Math.sin(a0);
-  const x1=48+ARC_R*Math.cos(a1), y1=44+ARC_R*Math.sin(a1);
+  const x0=48+ARC_R*Math.cos(a0), y0=44+ARC_R*Math.sin(a0), x1=48+ARC_R*Math.cos(a1), y1=44+ARC_R*Math.sin(a1);
   return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${ARC_R} ${ARC_R} 0 ${(a1-a0)>Math.PI?1:0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
 }
 function buildGauges(){
   if(!CODE){ $("#gauges").innerHTML=""; return; }
-  if(!CODE.devices.length){ $("#gauges").innerHTML=`<p class="meta" style="grid-column:1/-1">No devices to show.</p>`; return; }
-  $("#gauges").innerHTML=CODE.devices.map(d=>{
-    const s=Sim.dev[d.name];
-    const isMotor=s&&s.kind==="motor";
-    const r=travelRange(CODE,d.name);
-    const lo=isMotor?0:(r?r.lo:0), hi=isMotor?1:(r?r.hi:1);
-    const spec=s?s.spec:null;
+  const acts=CODE.devices.filter(d=>Sim.dev[d.name]&&/Servo|DcMotor/i.test(d.type||""));
+  if(!acts.length){ $("#gauges").innerHTML=`<p class="hint" style="grid-column:1/-1">No servos or motors in this OpMode.</p>`; return; }
+  $("#gauges").innerHTML=acts.map(d=>{
+    const s=Sim.dev[d.name], isMotor=s.kind==="motor", r=travelRange(CODE,d.name);
+    const lo=r?r.lo:0, hi=r?r.hi:1;
     return `<div class="gauge" data-dev="${esc(d.name)}" data-motor="${isMotor?1:0}">
-      <div class="stallflag" style="display:none">STALL</div>
-      <svg viewBox="0 0 96 78">
+      <div class="stallflag" hidden>STALL</div>
+      <svg viewBox="0 0 96 74" aria-hidden="true">
         <path class="g-track" d="${arcPath(0,1)}"/>
         ${isMotor?"":`<path class="g-range" d="${arcPath(lo,hi)}"/>`}
         <path class="g-fill" d="${arcPath(0,0.001)}" data-fill></path>
         <line class="g-cmd" data-cmd x1="48" y1="44" x2="48" y2="12"></line>
-        <text x="48" y="46" text-anchor="middle" dominant-baseline="central"
-              style="font-family:var(--mono);font-size:15px;font-weight:700;fill:var(--tx)" data-val>0.00</text>
-        <text x="48" y="61" text-anchor="middle" style="font-family:var(--mono);font-size:8.5px;fill:var(--tx-3)" data-deg>—</text>
+        <text x="48" y="45" text-anchor="middle" dominant-baseline="central" style="font-family:var(--mono);font-size:14px;font-weight:700;fill:var(--tx)" data-val>0.00</text>
+        <text x="48" y="60" text-anchor="middle" style="font-family:var(--mono);font-size:8.5px;fill:var(--tx-3)" data-deg>—</text>
       </svg>
-      <div class="gname">${esc(d.name)}</div>
-      <div class="gsub">${spec?esc(isMotor?"power":spec.role):"unmapped"}</div>
+      <div class="gname" title="${esc(d.name)}">${esc(d.name)}</div>
+      <div class="gsub">${esc(isMotor?(s.mode==="rtp"?"to position":"power"):(s.spec.role||"servo"))}</div>
     </div>`;
   }).join("");
 }
 function updateGauges(){
-  document.querySelectorAll(".gauge").forEach(el=>{
+  $$(".gauge").forEach(el=>{
     const s=Sim.dev[el.dataset.dev]; if(!s) return;
     const isMotor=el.dataset.motor==="1";
-    const t=isMotor? (s.act+1)/2 : clamp01(s.act);
-    const tc=isMotor? (s.cmd+1)/2 : clamp01(s.cmd);
+    const t=isMotor?(s.act+1)/2:clamp01(s.act), tc=isMotor?(s.cmd+1)/2:clamp01(s.cmd);
     el.querySelector("[data-fill]").setAttribute("d",arcPath(isMotor?0.5:0,Math.max(0.002,t)));
-    const a=ARC_A0+(ARC_A1-ARC_A0)*clamp01(tc);
-    const ln=el.querySelector("[data-cmd]");
+    const a=ARC_A0+(ARC_A1-ARC_A0)*clamp01(tc), ln=el.querySelector("[data-cmd]");
     ln.setAttribute("x2",(48+ARC_R*1.14*Math.cos(a)).toFixed(2));
     ln.setAttribute("y2",(44+ARC_R*1.14*Math.sin(a)).toFixed(2));
-    el.querySelector("[data-val]").textContent = isMotor? s.act.toFixed(2) : s.act.toFixed(2);
-    el.querySelector("[data-deg]").textContent = isMotor
-      ? ((s.spec.rpm||0)*s.act).toFixed(0)+" rpm"
-      : (s.act*s.travelDeg).toFixed(0)+"°";
+    el.querySelector("[data-val]").textContent=s.act.toFixed(2);
+    el.querySelector("[data-deg]").textContent=isMotor?Math.round(s.ticks)+" ticks":(s.act*s.travelDeg).toFixed(0)+"°";
     el.classList.toggle("stalled",s.stalled);
-    el.querySelector(".stallflag").style.display=s.stalled?"block":"none";
+    el.querySelector(".stallflag").hidden=!s.stalled;
   });
 }
 
-/* ---------- side elevation (the torque angle) ---------- */
-function renderMech(){
+/* ============================================================
+   TORQUE ANGLE (picture-in-picture)
+   ============================================================ */
+function liftState(){
   const M=CAD?CAD.mechs:[];
   const byKind=k=>M.filter(m=>m.kind===k)[0]||null;
   const R={lift:byKind("revolute-lift"), yaw:byKind("revolute-yaw"), eff:byKind("effector")};
-  const liftDev=R.lift?deviceOn(R.lift.id):null;
-  const effDev =R.eff ?deviceOn(R.eff.id ):null;
-  const yawDev =R.yaw ?deviceOn(R.yaw.id ):null;
-  const aS=liftDev?Sim.dev[liftDev]:null, cS=effDev?Sim.dev[effDev]:null, yS=yawDev?Sim.dev[yawDev]:null;
-  if(!R.lift||!aS)
-    return `<svg viewBox="0 0 340 150" role="img" aria-label="No lift joint"><rect width="340" height="150" fill="#0E1218"/>
-      <text x="170" y="70" text-anchor="middle" style="font-family:var(--mono);font-size:11px;fill:#5C6B7D">no lift joint mapped</text>
-      <text x="170" y="88" text-anchor="middle" style="font-family:var(--mono);font-size:9px;fill:#44515F">this view shows the angle a lifting joint works at</text></svg>`;
-
+  const dev=m=>m?deviceOn(m.id):null;
+  return {R, aS:Sim.dev[dev(R.lift)]||null, cS:Sim.dev[dev(R.eff)]||null, yS:Sim.dev[dev(R.yaw)]||null};
+}
+function renderMech(){
+  const {R,aS,cS}=liftState();
+  if(!R.lift||!aS) return null;
   const L=leverOf(R.lift)*1000||163;
-  const ang=(R.lift.restAngleDeg + (aS.act-aS.restPos)*aS.travelDeg) * Math.PI/180;
-  const PX=140, PY=64, ARM=104;
-  const ex=PX+Math.cos(ang)*ARM, ey=PY-Math.sin(ang)*ARM;
-  const open=cS?(1-clamp01(cS.act))*12+4:8;
-  const stall=aS.stalled;
-  const degTxt=(ang*180/Math.PI).toFixed(0);
-  return `<svg viewBox="0 0 340 170" role="img" aria-label="Side elevation: lift arm at ${degTxt} degrees from horizontal">
-    <rect width="340" height="170" fill="#0E1218"/>
-    <line x1="0" y1="152" x2="340" y2="152" stroke="#26313F"/>
-    <line x1="${PX}" y1="${PY}" x2="325" y2="${PY}" stroke="#2E3A49" stroke-dasharray="3 3"/>
-    <text x="327" y="${PY+3}" style="font-family:var(--mono);font-size:8px;fill:#4E5C6D" text-anchor="end">horizontal</text>
-    <rect x="${PX-40}" y="126" width="80" height="26" rx="3" fill="#1C242F" stroke="#2F3B4A"/>
-    <text x="${PX}" y="142" text-anchor="middle" style="font-family:var(--mono);font-size:8px;fill:#6F7F92">FRAME · fixed</text>
-    ${yS?`<text x="328" y="${PY+34}" text-anchor="end" style="font-family:var(--mono);font-size:9px;fill:#8B9BAF">${esc(mlabel(R.yaw))} turret ${((yS.act-yS.restPos)*yS.travelDeg).toFixed(0)}°</text>
-    <text x="328" y="${PY+46}" text-anchor="end" style="font-family:var(--mono);font-size:8px;fill:#5C6B7D">swings the whole arm</text>`:""}
-    <rect x="${PX-8}" y="${PY}" width="16" height="${126-PY}" fill="#222E3B" stroke="#33414F"/>
-    <line x1="${PX}" y1="${PY}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${stall?"#E4574E":"#4D9FFF"}" stroke-width="9" stroke-linecap="round"/>
-    <circle cx="${PX}" cy="${PY}" r="9" fill="#0E1218" stroke="${stall?"#E4574E":"#4D9FFF"}" stroke-width="3"/>
+  const ang=(R.lift.restAngleDeg+(aS.act-aS.restPos)*aS.travelDeg)*Math.PI/180;
+  const PX=96, PY=60, ARM=92, ex=PX+Math.cos(ang)*ARM, ey=PY-Math.sin(ang)*ARM;
+  const open=cS?(1-clamp01(cS.act))*11+4:8, stall=aS.stalled, deg=Math.round(ang*180/Math.PI);
+  const col=stall?"#E4574E":"#4D9FFF";
+  return {deg, svg:`<svg viewBox="0 0 250 150" role="img" aria-label="Side elevation: lift arm at ${deg} degrees from horizontal">
+    <line x1="0" y1="136" x2="250" y2="136" stroke="#26313F"/>
+    <line x1="${PX}" y1="${PY}" x2="244" y2="${PY}" stroke="#2E3A49" stroke-dasharray="3 3"/>
+    <text x="244" y="${PY-4}" text-anchor="end" style="font-family:var(--mono);font-size:8px;fill:#4E5C6D">horizontal</text>
+    <rect x="${PX-34}" y="112" width="68" height="24" rx="3" fill="#1C242F" stroke="#2F3B4A"/>
+    <text x="${PX}" y="127" text-anchor="middle" style="font-family:var(--mono);font-size:7.5px;fill:#6F7F92">FRAME</text>
+    <rect x="${PX-7}" y="${PY}" width="14" height="${112-PY}" fill="#222E3B" stroke="#33414F"/>
+    <line x1="${PX}" y1="${PY}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${col}" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="${PX}" cy="${PY}" r="8" fill="#0E1218" stroke="${col}" stroke-width="3"/>
     <g transform="translate(${ex.toFixed(1)},${ey.toFixed(1)}) rotate(${(-ang*180/Math.PI).toFixed(1)})">
-      <line x1="0" y1="0" x2="15" y2="${(-open).toFixed(1)}" stroke="#3FB68B" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="0" y1="0" x2="15" y2="${open.toFixed(1)}" stroke="#3FB68B" stroke-width="4.5" stroke-linecap="round"/>
-      <circle cx="0" cy="0" r="5.5" fill="#0E1218" stroke="#3FB68B" stroke-width="2.5"/>
+      <line x1="0" y1="0" x2="13" y2="${(-open).toFixed(1)}" stroke="#3FB68B" stroke-width="4" stroke-linecap="round"/>
+      <line x1="0" y1="0" x2="13" y2="${open.toFixed(1)}" stroke="#3FB68B" stroke-width="4" stroke-linecap="round"/>
+      <circle r="5" fill="#0E1218" stroke="#3FB68B" stroke-width="2.2"/>
     </g>
-    <text x="12" y="20" style="font-family:var(--mono);font-size:9.5px;fill:#8B9BAF">${L.toFixed(0)} mm lever</text>
-    <text x="12" y="34" style="font-family:var(--mono);font-size:9.5px;fill:${Math.abs(+degTxt)<12?"#E0A42E":"#6F7F92"}">${degTxt}° off horizontal</text>
-    ${stall?`<rect x="196" y="10" width="132" height="22" rx="3" fill="#2E1715" stroke="#E4574E"/>
-      <text x="262" y="25" text-anchor="middle" style="font-family:var(--mono);font-size:9.5px;font-weight:700;fill:#E4574E">STALLED — CAN'T LIFT</text>`:""}
-  </svg>`;
+    <text x="8" y="16" style="font-family:var(--mono);font-size:9px;fill:#8B9BAF">${L.toFixed(0)} mm lever</text>
+    ${stall?`<text x="8" y="30" style="font-family:var(--mono);font-size:9px;font-weight:700;fill:#E4574E">STALLED — can't lift</text>`:""}
+  </svg>`};
 }
 
-/* ---------- telemetry ---------- */
+/* ============================================================
+   TELEMETRY (Driver Station panel)
+   ============================================================ */
+function telemetryValue(t,env){
+  const s=String(t.expr||"").trim();
+  if(/^".*"$/.test(s)) return s.slice(1,-1);
+  const em=/^([A-Za-z_$][\w$]*)\s*\.\s*get(Position|Power)\s*\(\s*\)$/.exec(s);
+  if(em&&Sim.dev[em[1]]) return Sim.dev[em[1]].cmd;
+  const ast=parseExpr(s); if(!ast) return null;
+  const n=evalNode(ast,env);
+  return (typeof n==="number"&&isFinite(n))?n:null;
+}
+const fmtNum=v=>typeof v!=="number"?String(v):(Math.abs(v)>=100||Number.isInteger(v)?String(Math.round(v*100)/100):v.toFixed(3));
 function renderDS(){
-  if(!CODE) return "";
-  let out="";
-  const env=Sim.env();
+  if(!CODE) return `<div class="dsk">No OpMode loaded.</div>`;
+  const env=Sim.env(); let out="";
+  if(Sim.phase==="loaded"||Sim.phase==="stopped")
+    out+=`<div class="dsk">${Sim.phase==="stopped"?"OpMode stopped.":"Press INIT to start."}</div>`;
   for(const t of CODE.telemetry){
-    if(t.kind==="addLine"){ out+= t.label? `<div class="dsl">${esc(t.label)}</div>` : `<div>&nbsp;</div>`; continue; }
-    let v="—";
-    const em=/^([A-Za-z_$][\w$]*)\s*\.\s*get(Position|Power)\s*\(\s*\)$/.exec(t.expr);
-    if(em&&Sim.dev[em[1]]) v=Sim.dev[em[1]].cmd.toFixed(3);
-    else{
-      const ast=parseExpr(t.expr);
-      if(ast){ const n=evalNode(ast,env); if(isFinite(n)) v=n.toFixed(3); }
-    }
-    out+=`<div><span class="dsk">${esc(t.label)} :</span> <span class="dsv">${esc(v)}</span></div>`;
+    if(t.kind==="addLine"){ out+=t.label?`<div class="dsl">${esc(t.label)}</div>`:`<div>&nbsp;</div>`; continue; }
+    const v=telemetryValue(t,env);
+    out+=`<div><span class="dsk">${esc(t.label)} :</span> <span class="dsv">${v==null?"—":esc(fmtNum(v))}</span></div>`;
   }
-  out+=`<div class="dshr">────────────────────────</div>`;
-  out+=`<div><span class="dsk">loop</span> <span class="dsv">${Sim.t.toFixed(1)} s @ 50 Hz</span></div>`;
+  out+=`<div class="dshr">────────────────────</div>`;
   if(Sim.drivetrain&&Sim.drivetrain.ok)
-    out+=`<div><span class="dsk">pose</span> <span class="dsv">x ${Sim.chassis.x.toFixed(2)} m   y ${Sim.chassis.y.toFixed(2)} m   ${(Sim.chassis.h*180/Math.PI).toFixed(0)}°</span></div>`;
+    out+=`<div><span class="dsk">pose</span> <span class="dsv">${Sim.chassis.x.toFixed(2)}, ${Sim.chassis.y.toFixed(2)} m · ${Math.round(Sim.chassis.h*180/Math.PI)}°</span></div>`;
+  if(Sim.sleptMs&&CODE.hasLoop) out+=`<div><span class="dsk">bench</span> <span class="dsbad">sleep() blocked the loop for ${Math.round(Sim.sleptMs)} ms so far</span></div>`;
   const st=Object.keys(Sim.dev).filter(k=>Sim.dev[k].stalled);
-  out+= st.length
-    ? `<div><span class="dsk">bench</span> <span style="color:#E4574E">STALL on ${esc(st.join(", "))} — commanded position not reached</span></div>`
-    : `<div><span class="dsk">bench</span> <span class="dsv">all actuators tracking command</span></div>`;
+  out+=st.length?`<div><span class="dsk">bench</span> <span class="dsbad">stalled: ${esc(st.join(", "))}</span></div>`
+               :`<div><span class="dsk">bench</span> <span class="dsv">actuators tracking command</span></div>`;
+  if(!CODE.hasLoop&&CODE.auto&&CODE.auto.length&&Sim.phase==="running")
+    out+=`<div><span class="dsk">auto</span> <span class="dsv">${Sim.autoDone?"sequence finished":"step "+Math.min(Sim.pc+1,CODE.auto.length)+" of "+CODE.auto.length}</span></div>`;
   return out;
 }
 
-/* ---------- tables ---------- */
+/* ============================================================
+   HARDWARE MAP & ASSEMBLY
+   ============================================================ */
 function renderTables(){
   const mapT=$("#mapTable");
-  if(!CODE.devices.length){ mapT.innerHTML=`<tr><td class="meta">No devices found in this OpMode.</td></tr>`; }
+  if(!CODE.devices.length) mapT.innerHTML=`<tr><td class="dim">No devices found in this OpMode.</td></tr>`;
   else mapT.innerHTML=`<tr><th>device</th><th>mechanism</th><th>role</th><th>N·m</th><th>lever</th></tr>`+
     CODE.devices.map(d=>{
-      const opts=[`<option value="">— none —</option>`].concat(
-        CAD.mechs.map(m=>`<option value="${esc(m.id)}"${MAP[d.name]===m.id?" selected":""}>${esc(mlabel(m))}</option>`)).join("");
       const mech=CAD.mechs.filter(m=>m.id===MAP[d.name])[0]||null;
+      const opts=[`<option value="">— none —</option>`].concat(CAD.mechs.map(m=>
+        `<option value="${esc(m.id)}"${MAP[d.name]===m.id?" selected":""}>${esc(mlabel(m))}</option>`)).join("");
+      const actuator=/Servo|DcMotor/i.test(d.type||"");
       const spec=specFor(d,mech,OPTS.trust);
-      const roles=["Torque","Speed","Servo","Motor","CR"];
-      const ropts=roles.map(r=>`<option value="${r}"${spec.role===r?" selected":""}>${r}</option>`).join("");
-      const lever = mech&&mech.kind!=="fixed"&&mech.kind!=="effector"
+      const ropts=["Torque","Speed","Servo","Motor","CR"].map(r=>`<option value="${r}"${spec.role===r?" selected":""}>${r}</option>`).join("");
+      const lever=mech&&mech.kind!=="fixed"&&mech.kind!=="effector"
         ? `<input class="mini" type="number" step="1" min="0" data-lever="${esc(d.name)}" value="${(leverOf(mech)*1000).toFixed(0)}" aria-label="Lever length for ${esc(d.name)} in mm">`
-        : `<span style="color:var(--tx-3)">—</span>`;
-      return `<tr><td class="mono" title="${esc(d.type+"  ·  "+(d.cfg?'"'+d.cfg+'"':"no config")+"  ·  "+spec.fam+"  ·  from "+spec.src)}">${esc(d.name)}</td>
+        : `<span class="dim">—</span>`;
+      return `<tr><td class="mono" title="${esc(d.type+" · "+(d.cfg?'"'+d.cfg+'"':"no config name")+" · "+spec.fam+" · from "+spec.src)}">${esc(d.name)}</td>
         <td><select data-dev="${esc(d.name)}" aria-label="Mechanism for ${esc(d.name)}">${opts}</select></td>
-        <td><select data-role="${esc(d.name)}" aria-label="Actuator role for ${esc(d.name)}">${ropts}</select></td>
-        <td><input class="mini" type="number" step="0.05" min="0" data-nm="${esc(d.name)}"
-             value="${(spec.stallNm||0).toFixed(2)}" aria-label="Stall torque for ${esc(d.name)}"></td>
+        <td>${actuator?`<select data-role="${esc(d.name)}" aria-label="Actuator role for ${esc(d.name)}">${ropts}</select>`:`<span class="dim mono">${esc(d.type)}</span>`}</td>
+        <td>${actuator?`<input class="mini" type="number" step="0.05" min="0" data-nm="${esc(d.name)}" value="${(spec.stallNm||0).toFixed(2)}" aria-label="Stall torque for ${esc(d.name)}">`:""}</td>
         <td>${lever}</td></tr>`;
     }).join("");
   mapT.querySelectorAll("[data-role]").forEach(s=>s.addEventListener("change",()=>{
     const n=s.dataset.role;
-    HW_USER[n]=Object.assign({},HW_USER[n],{role:s.value,
-      kind:(s.value==="Motor"?"motor":s.value==="CR"?"crservo":"servo")});
+    HW_USER[n]=Object.assign({},HW_USER[n],{role:s.value, kind:(s.value==="Motor"?"motor":s.value==="CR"?"crservo":"servo")});
     rebuild(); saveRig(); }));
   mapT.querySelectorAll("[data-nm]").forEach(i=>i.addEventListener("change",()=>{
-    const v=parseFloat(i.value); const n=i.dataset.nm;
+    const v=parseFloat(i.value), n=i.dataset.nm;
     HW_USER[n]=Object.assign({},HW_USER[n],{stallNm:(isFinite(v)&&v>0)?v:undefined});
     rebuild(); saveRig(); }));
-  mapT.querySelectorAll("select").forEach(sel=>sel.addEventListener("change",()=>{
-    MAP[sel.dataset.dev]=sel.value||null; rebuild(); saveRig(); }));
+  mapT.querySelectorAll("select[data-dev]").forEach(sel=>sel.addEventListener("change",()=>{
+    MAP[sel.dataset.dev]=sel.value||null; RIG_DEVICES[sel.dataset.dev]=sel.value||null;
+    rebuild(); saveRig(); }));
   mapT.querySelectorAll("[data-lever]").forEach(inp=>inp.addEventListener("change",()=>{
-    const mech=CAD.mechs.filter(m=>m.id===MAP[inp.dataset.lever])[0];
-    if(mech){ const v=parseFloat(inp.value);
-      mech.leverOverride = (isFinite(v)&&v>0)? v/1000 : null; mech.inferred=false; rebuild(); saveRig(); }
-  }));
+    const mech=CAD.mechs.filter(m=>m.id===MAP[inp.dataset.lever])[0]; if(!mech) return;
+    const v=parseFloat(inp.value);
+    mech.leverOverride=(isFinite(v)&&v>0)?v/1000:null; mech.inferred=false; rebuild(); saveRig(); }));
   $("#mapPill").textContent=CODE.devices.length+" device"+(CODE.devices.length===1?"":"s");
 
-  const tt=$("#treeTable");
-  const srt=CAD.parts.slice().sort((a,b)=>{
-    const r=(x)=>x.kind==="servo"||x.kind==="motor"?0:1;
-    return r(a)-r(b) || a.name.localeCompare(b.name); });
-  tt.innerHTML=`<tr><th>part</th><th style="text-align:right">qty</th><th>id</th></tr>`+
+  const srt=CAD.parts.slice().sort((a,b)=>{ const r=x=>x.kind==="servo"||x.kind==="motor"?0:1; return r(a)-r(b)||a.name.localeCompare(b.name); });
+  $("#treeTable").innerHTML=`<tr><th>part</th><th style="text-align:right">qty</th><th>id</th></tr>`+
     srt.map(p=>`<tr><td>${esc(p.name)}${(p.kind==="servo"||p.kind==="motor")?' <span class="tag mut">'+p.kind+'</span>':""}</td>
-      <td class="num" style="color:var(--tx-3)">${p.n}</td>
-      <td class="mono" style="color:var(--tx-3);font-size:10.5px">${esc(p.part||"")}</td></tr>`).join("");
+      <td class="num dim">${p.n}</td><td class="mono dim" style="font-size:10.5px">${esc(p.part||"")}</td></tr>`).join("");
   $("#partPill").textContent=CAD.parts.reduce((s,p)=>s+p.n,0)+" occurrences";
 }
 
@@ -319,8 +469,7 @@ function renderTables(){
    THE RIG DOCUMENT
    Detection only seeds this. Once written down it is the model
    everything runs on, it survives reloads, and it can be pasted
-   into a repo so next season starts from last season's rig
-   instead of from whatever the CAD happened to be guessable.
+   into a repo so next season starts from last season's rig.
    ============================================================ */
 let HW_USER={};            // per-device spec overrides
 function rigKey(){ return "ftcbench.rig."+((CAD&&CAD.name)||"sample"); }
@@ -335,7 +484,7 @@ function exportRig(){
       axis:m.axis?m.axis.map(v=>+v.toFixed(4)):null,
       leverMm:m.leverOverride!=null?+(m.leverOverride*1000).toFixed(1):null,
       part:m.part||null, manual:!!m.manual, inferred:!!m.inferred })),
-    devices:MAP, hardware:HW_USER, ignored:Object.keys(IGNORED)
+    devices:Object.assign({},RIG_DEVICES,MAP), hardware:HW_USER, ignored:Object.keys(IGNORED)
   };
 }
 function applyRig(r){
@@ -348,7 +497,7 @@ function applyRig(r){
   for(const j of (r.joints||[])){
     let m=byId[j.id];
     if(!m){
-      if(!j.manual && !j.pivotMm) continue;      // a joint from a CAD we no longer have
+      if(!j.manual&&!j.pivotMm) continue;
       m={id:j.id, cluster:[], part:j.part||null, partName:null, hasActuator:false};
       CAD.mechs.push(m); byId[j.id]=m;
     }
@@ -358,26 +507,30 @@ function applyRig(r){
     m.dir=j.dir||1;
     if(j.pivotMm) m.pivot=j.pivotMm.map(v=>v/1000);
     if(j.axis) m.axis=j.axis;
-    m.leverOverride = (j.leverMm!=null)? j.leverMm/1000 : null;
-    m.manual=!!j.manual;
-    m.inferred=!!j.inferred;
+    m.leverOverride=(j.leverMm!=null)?j.leverMm/1000:null;
+    m.manual=!!j.manual; m.inferred=!!j.inferred;
   }
-  if(r.devices) MAP=Object.assign({},MAP,r.devices);
+  RIG_DEVICES=Object.assign({},r.devices||{});
   HW_USER=r.hardware||{};
   if(r.ignored){ IGNORED={}; r.ignored.forEach(k=>IGNORED[k]=1); }
   recomputeChain(CAD.mechs);
+  syncOptionControls();
   return true;
 }
+function applyDeviceMemory(){
+  if(!CODE) return;
+  const ids={}; CAD.mechs.forEach(m=>ids[m.id]=1);
+  for(const d of CODE.devices) if(Object.prototype.hasOwnProperty.call(RIG_DEVICES,d.name)){
+    const v=RIG_DEVICES[d.name]; if(v===null||ids[v]) MAP[d.name]=v;
+  }
+}
 function saveRig(){
-  try{ localStorage.setItem(rigKey(),JSON.stringify(exportRig())); }catch(e){}
+  store.set(rigKey(),JSON.stringify(exportRig()));
   const ta=$("#rigJson"); if(ta&&document.activeElement!==ta) ta.value=JSON.stringify(exportRig(),null,1);
 }
 function loadSavedRig(){
-  try{ const s=localStorage.getItem(rigKey()); if(!s) return false; return applyRig(JSON.parse(s)); }
-  catch(e){ return false; }
+  try{ const s=store.get(rigKey(),null); if(!s) return false; return applyRig(JSON.parse(s)); }catch(e){ return false; }
 }
-/* Any part occurrence in the assembly can host a joint, so a mechanism the
-   detector never grouped is still one dropdown away. */
 function rigSpots(){
   if(!CAD||!CAD.placements) return [];
   const out=[], seen={};
@@ -388,262 +541,531 @@ function rigSpots(){
     out.push({name:p.child, loc:p.loc, axis:p.axis});
     if(out.length>=400) break;
   }
-  out.sort((a,b)=>a.name.localeCompare(b.name));
-  return out;
+  return out.sort((a,b)=>a.name.localeCompare(b.name));
 }
 function addManualJoint(){
   if(!CAD) return;
   const c=[0,1,2].map(i=>(CAD.bbox.min[i]+CAD.bbox.max[i])/2);
   let n=1; while(CAD.mechs.some(m=>m.id==="joint "+n)) n++;
-  CAD.mechs.push({id:"joint "+n, label:"joint "+n, kind:"fixed", parent:"chassis", dir:1,
-    axis:[0,0,1], pivot:c, cluster:[], part:null, partName:null,
-    hasActuator:false, manual:true, inferred:false, leverOverride:null});
+  CAD.mechs.push({id:"joint "+n, label:"joint "+n, kind:"fixed", parent:"chassis", dir:1, axis:[0,0,1], pivot:c,
+    cluster:[], part:null, partName:null, hasActuator:false, manual:true, inferred:false, leverOverride:null});
   rigChanged();
 }
-
-/* ---------- kinematics: every inference, editable ---------- */
+let RIG_SPOTS=[];
+const byMech=id=>CAD?CAD.mechs.filter(m=>m.id===id)[0]||null:null;
 function renderRig(){
-  const M=CAD.mechs;
-  const t=$("#rigTable");
-  if(!M.length){ t.innerHTML=`<tr><td class="meta">No mechanisms found in this CAD.</td></tr>`;
-    $("#rigChain").innerHTML=""; $("#rigPill").textContent="none"; return; }
-  const spots=rigSpots();
-  const spotOpts=spots.map((s,i)=>
-    `<option value="${i}">${esc(s.name.slice(0,30))} (${s.loc.map(v=>(v*1000).toFixed(0)).join(",")})</option>`).join("");
-  RIG_SPOTS=spots;
+  const M=CAD.mechs, t=$("#rigTable");
+  if(!M.length){ t.innerHTML=`<tr><td class="dim">No mechanisms found in this CAD. Add one with + Joint.</td></tr>`;
+    $("#rigChain").innerHTML=""; $("#rigPill").textContent="none"; $("#rigCount").textContent=""; $("#guessPill").textContent="—"; return; }
+  RIG_SPOTS=rigSpots();
+  const spotOpts=RIG_SPOTS.map((s,i)=>`<option value="${i}">${esc(s.name.slice(0,30))} (${s.loc.map(v=>(v*1000).toFixed(0)).join(",")})</option>`).join("");
   t.innerHTML=`<tr><th>name</th><th>joint</th><th>moves with</th><th>pivot at</th><th>dir</th><th></th></tr>`+
     M.map(m=>{
-      const kopts=Object.keys(JOINT_KINDS).map(k=>
-        `<option value="${k}"${m.kind===k?" selected":""}>${JOINT_KINDS[k].label}</option>`).join("");
+      const kopts=Object.keys(JOINT_KINDS).map(k=>`<option value="${k}"${m.kind===k?" selected":""}>${JOINT_KINDS[k].label}</option>`).join("");
       const popts=[`<option value="chassis"${m.parent==="chassis"?" selected":""}>chassis (frame)</option>`]
-        .concat(M.filter(x=>x.id!==m.id).map(x=>
-          `<option value="${esc(x.id)}"${m.parent===x.id?" selected":""}>${esc(mlabel(x))}</option>`)).join("");
-      const dot=m.inferred?`<span class="guess" title="inferred — confirm or change it"></span>`
-                          :`<span class="guess set" title="you set this"></span>`;
+        .concat(M.filter(x=>x.id!==m.id).map(x=>`<option value="${esc(x.id)}"${m.parent===x.id?" selected":""}>${esc(mlabel(x))}</option>`)).join("");
+      const dot=m.inferred?`<span class="guess" title="inferred — confirm or change it"></span>`:`<span class="guess set" title="you set this"></span>`;
       return `<tr class="${m.manual?"manual":""}">
         <td><input class="rigname" data-rigname="${esc(m.id)}" value="${esc(mlabel(m))}" aria-label="Name for ${esc(m.id)}">${dot}</td>
         <td><select data-rigkind="${esc(m.id)}" aria-label="Joint type for ${esc(mlabel(m))}">${kopts}</select></td>
         <td><select data-rigparent="${esc(m.id)}" aria-label="What ${esc(mlabel(m))} moves with">${popts}</select></td>
         <td><select data-rigspot="${esc(m.id)}" aria-label="Pivot location for ${esc(mlabel(m))}">
-              <option value="">as measured (${m.pivot?m.pivot.map(v=>(v*1000).toFixed(0)).join(","):"—"})</option>${spotOpts}</select></td>
+          <option value="">as measured (${m.pivot?m.pivot.map(v=>(v*1000).toFixed(0)).join(","):"—"})</option>${spotOpts}</select></td>
         <td><button class="dirbtn" data-rigdir="${esc(m.id)}" title="Flip which way this joint travels">${m.dir>0?"+":"−"}</button></td>
-        <td>${m.manual?`<button class="rmbtn" data-rigrm="${esc(m.id)}" title="Remove this joint">×</button>`:""}</td>
-      </tr>`;
+        <td>${m.manual?`<button class="rmbtn" data-rigrm="${esc(m.id)}" title="Remove this joint">×</button>`:""}</td></tr>`;
     }).join("");
-
   $("#rigChain").innerHTML=M.map(m=>{
-    const carries=rigCarries(M,m.id);
-    const dev=deviceOn(m.id);
+    const carries=rigCarries(M,m.id), dev=deviceOn(m.id);
     const par=m.parent==="chassis"?"the frame":mlabel(M.filter(x=>x.id===m.parent)[0]||{id:m.parent});
-    return `<div class="chainrow">
-      <span class="cn">${esc(mlabel(m))}</span> <span class="cj">${JOINT_KINDS[m.kind].label}</span>
+    return `<div class="chainrow"><span class="cn">${esc(mlabel(m))}</span> <span class="cj">${JOINT_KINDS[m.kind].label}</span>
       ${dev?` <code>${esc(dev)}</code>`:` <span class="cj">no device</span>`}
-      <div class="cc">mounted on ${esc(par)} &mdash; ${carries.length
-        ? "swings <b>"+carries.map(c=>esc(mlabel(M.filter(x=>x.id===c)[0]||{id:c}))).join("</b>, <b>")+"</b> with it"
-        : "carries nothing further"}</div></div>`;
+      <div class="cc">mounted on ${esc(par)} — ${carries.length?"swings <b>"+carries.map(c=>esc(mlabel(M.filter(x=>x.id===c)[0]||{id:c}))).join("</b>, <b>")+"</b> with it":"carries nothing further"}</div></div>`;
   }).join("");
   $("#rigPill").textContent=M.length+" joint"+(M.length===1?"":"s");
-
-  t.querySelectorAll("[data-rigkind]").forEach(s=>s.addEventListener("change",()=>{
-    const m=byMech(s.dataset.rigkind); if(!m) return;
-    m.kind=s.value; m.inferred=false; rigChanged(); }));
-  t.querySelectorAll("[data-rigparent]").forEach(s=>s.addEventListener("change",()=>{
-    const m=byMech(s.dataset.rigparent); if(!m) return;
-    m.parent=s.value; m.inferred=false; rigChanged(); }));
-  t.querySelectorAll("[data-rigdir]").forEach(b=>b.addEventListener("click",()=>{
-    const m=byMech(b.dataset.rigdir); if(!m) return;
-    m.dir=(m.dir>0?-1:1); m.inferred=false; renderRig(); }));
-  t.querySelectorAll("[data-rigname]").forEach(i=>i.addEventListener("change",()=>{
-    const m=byMech(i.dataset.rigname); if(!m) return;
-    m.label=i.value.trim()||m.id; m.inferred=false; rigChanged(); }));
+  t.querySelectorAll("[data-rigkind]").forEach(s=>s.addEventListener("change",()=>{ const m=byMech(s.dataset.rigkind); if(!m) return; m.kind=s.value; m.inferred=false; rigChanged(); }));
+  t.querySelectorAll("[data-rigparent]").forEach(s=>s.addEventListener("change",()=>{ const m=byMech(s.dataset.rigparent); if(!m) return; m.parent=s.value; m.inferred=false; rigChanged(); }));
+  t.querySelectorAll("[data-rigdir]").forEach(b=>b.addEventListener("click",()=>{ const m=byMech(b.dataset.rigdir); if(!m) return; m.dir=(m.dir>0?-1:1); m.inferred=false; renderRig(); saveRig(); }));
+  t.querySelectorAll("[data-rigname]").forEach(i=>i.addEventListener("change",()=>{ const m=byMech(i.dataset.rigname); if(!m) return; m.label=i.value.trim()||m.id; m.inferred=false; rigChanged(); }));
   t.querySelectorAll("[data-rigspot]").forEach(s=>s.addEventListener("change",()=>{
-    const m=byMech(s.dataset.rigspot); if(!m||s.value==="") return;
-    const sp=RIG_SPOTS[+s.value]; if(!sp) return;
-    m.pivot=sp.loc.slice(); m.axis=sp.axis?sp.axis.slice():m.axis; m.inferred=false;
-    rigChanged(); }));
+    const m=byMech(s.dataset.rigspot), sp=RIG_SPOTS[+s.value]; if(!m||s.value===""||!sp) return;
+    m.pivot=sp.loc.slice(); m.axis=sp.axis?sp.axis.slice():m.axis; m.inferred=false; rigChanged(); }));
   t.querySelectorAll("[data-rigrm]").forEach(b=>b.addEventListener("click",()=>{
     const id=b.dataset.rigrm;
     CAD.mechs=CAD.mechs.filter(x=>x.id!==id);
     CAD.mechs.forEach(x=>{ if(x.parent===id) x.parent="chassis"; });
-    for(const k in MAP) if(MAP[k]===id) MAP[k]=null;
+    for(const k in MAP) if(MAP[k]===id){ MAP[k]=null; RIG_DEVICES[k]=null; }
     rigChanged(); }));
-
-  const guessed=M.filter(m=>m.inferred).length;
-  const gp=$("#guessPill");
-  gp.textContent = guessed? guessed+" guessed" : "all confirmed";
-  gp.className = "pill"+(guessed?" warnp":" live");
+  const guessed=M.filter(m=>m.inferred).length, gp=$("#guessPill");
+  gp.textContent=guessed?guessed+" guessed":"all confirmed"; gp.className="pill"+(guessed?" warnp":" live");
+  const rc=$("#rigCount"); rc.textContent=guessed?String(guessed):""; rc.className="count"+(guessed?" warn":"");
 }
-let RIG_SPOTS=[];
-const byMech = id => CAD? CAD.mechs.filter(m=>m.id===id)[0]||null : null;
-function rigChanged(){
-  recomputeChain(CAD.mechs);
-  View.load(CAD);
-  rebuild();
-  saveRig();
-}
+function rigChanged(){ recomputeChain(CAD.mechs); View.load(CAD); rebuild(); saveRig(); }
 
-/* ---------- findings, with ignore ---------- */
+/* ============================================================
+   CHECKS (findings, with ignore)
+   ============================================================ */
 function renderFindings(){
-  const live=FINDINGS.filter(f=>!IGNORED[f.key]);
-  const hidden=FINDINGS.filter(f=>IGNORED[f.key]);
-  const cnt={fail:0,warn:0,pass:0,info:0};
-  live.forEach(f=>cnt[f.sev]++);
-  $("#score").innerHTML=
-    `<div class="s-fail"><div class="k">${cnt.fail}</div><div class="l">won't work</div></div>
+  const live=FINDINGS.filter(f=>!IGNORED[f.key]), hidden=FINDINGS.filter(f=>IGNORED[f.key]);
+  const cnt={fail:0,warn:0,pass:0,info:0}; live.forEach(f=>cnt[f.sev]++);
+  $("#score").innerHTML=`<div class="s-fail"><div class="k">${cnt.fail}</div><div class="l">won't work</div></div>
      <div class="s-warn"><div class="k">${cnt.warn}</div><div class="l">risky</div></div>
      <div class="s-pass"><div class="k">${cnt.pass}</div><div class="l">checks out</div></div>`;
-  const p=$("#verdictPill");
-  p.textContent = cnt.fail? cnt.fail+" blocking" : (cnt.warn? "runs with risk":"clear");
-  const col = cnt.fail? "var(--fail)" : (cnt.warn?"var(--warn)":"var(--pass)");
-  p.style.color=col; p.style.borderColor=col;
-
+  const cc=$("#checkCount");
+  cc.textContent=cnt.fail?String(cnt.fail):(cnt.warn?String(cnt.warn):"");
+  cc.className="count"+(cnt.fail?" fail":cnt.warn?" warn":"");
   const SEVL={fail:"WON'T WORK",warn:"RISKY",pass:"OK",info:"NOTE"};
-  $("#findings").innerHTML= live.length? live.map(f=>
-    `<div class="finding ${f.sev}">
+  $("#findings").innerHTML=live.length?live.map(f=>`<div class="finding ${f.sev}">
       <div class="fhead"><span class="fsev">${SEVL[f.sev]}</span><span class="ftitle">${f.title}</span>
         <button class="fignore" data-ig="${esc(f.key)}" title="Hide this finding — it stays hidden next time too">Ignore</button></div>
       <div class="fbody">${f.body}</div>
       ${f.math?`<div class="fmath">${esc(f.math)}</div>`:""}
-      ${f.fix?`<div class="ffix"><b>Fix</b>${f.fix}</div>`:""}
-    </div>`).join("")
-    : `<p class="meta" style="padding:14px 13px">Nothing to report${hidden.length?" — "+hidden.length+" finding"+(hidden.length>1?"s":"")+" ignored":""}.</p>`;
-
-  $("#ignoredWrap").innerHTML = hidden.length
-    ? `<div class="ignored-head"><h3>Ignored · ${hidden.length}</h3><span class="spacer" style="margin-left:auto"></span>
-         <button id="clearIgnored" style="padding:2px 8px;font-size:11px">Restore all</button></div>`+
-      hidden.map(f=>`<div class="ign-row"><span class="t">${f.title.replace(/<[^>]+>/g,"")}</span>
-         <button data-unig="${esc(f.key)}" style="padding:2px 8px;font-size:11px">Restore</button></div>`).join("")
-    : "";
-
-  document.querySelectorAll("[data-ig]").forEach(b=>b.addEventListener("click",()=>{
-    IGNORED[b.dataset.ig]=1; saveIgnored(); renderFindings(); }));
-  document.querySelectorAll("[data-unig]").forEach(b=>b.addEventListener("click",()=>{
-    delete IGNORED[b.dataset.unig]; saveIgnored(); renderFindings(); }));
-  const ci=$("#clearIgnored");
-  if(ci) ci.addEventListener("click",()=>{ IGNORED={}; saveIgnored(); renderFindings(); });
+      ${f.fix?`<div class="ffix"><b>Fix</b>${f.fix}</div>`:""}</div>`).join("")
+    :`<p class="cmp-note">Nothing to report${hidden.length?" — "+hidden.length+" finding"+(hidden.length>1?"s":"")+" ignored":""}.</p>`;
+  $("#ignoredWrap").innerHTML=hidden.length
+    ?`<div class="ignored-head"><h4>Ignored · ${hidden.length}</h4><span class="spacer"></span><button class="btn-sm" id="clearIgnored">Restore all</button></div>`+
+      hidden.map(f=>`<div class="ign-row"><span class="t">${esc(f.title.replace(/<[^>]+>/g,""))}</span><button class="btn-sm" data-unig="${esc(f.key)}">Restore</button></div>`).join(""):"";
+  $$("[data-ig]").forEach(b=>b.addEventListener("click",()=>{ IGNORED[b.dataset.ig]=1; saveIgnored(); renderFindings(); saveRig(); }));
+  $$("[data-unig]").forEach(b=>b.addEventListener("click",()=>{ delete IGNORED[b.dataset.unig]; saveIgnored(); renderFindings(); saveRig(); }));
+  const ci=$("#clearIgnored"); if(ci) ci.addEventListener("click",()=>{ IGNORED={}; saveIgnored(); renderFindings(); saveRig(); });
 }
 
-/* ---------- orchestration ---------- */
-function rebuild(){
+/* ============================================================
+   COVERAGE — what the bench actually runs
+   ============================================================ */
+function renderCoverage(){
+  if(!CODE){ $("#coverage").innerHTML=""; return; }
+  const cov=coverage(CODE), pill=$("#covPill");
+  pill.textContent=cov.understood+" / "+cov.total+" statements";
+  pill.className="pill"+(cov.skipped.length?" warnp":" live");
+  const mode=CODE.hasLoop?"TeleOp loop":(CODE.auto&&CODE.auto.length?"autonomous sequence of "+CODE.auto.length+" steps":"no loop found");
+  if(!cov.skipped.length){
+    $("#coverage").innerHTML=`<p class="cov-ok"><b>Everything</b> in this OpMode runs on the bench — ${esc(mode)}.</p>`;
+    return;
+  }
+  $("#coverage").innerHTML=`<p class="cov-ok" style="margin:0 0 6px">Runs as a ${esc(mode)}. These lines are skipped, not guessed at:</p>`+
+    cov.skipped.map(s=>`<div class="cov-row"><span class="ln">line ${s.line||"?"}</span><span class="tx">${esc(String(s.text).slice(0,90))}</span><span class="why">${esc(s.why)}</span></div>`).join("");
+}
+
+/* ============================================================
+   CONFIG VARIABLES — live-editable, as FTC Dashboard exposes them
+   ============================================================ */
+function renderConfigVars(){
+  const box=$("#cfgVars"), note=$("#cfgVarNote"), pill=$("#cfgVarPill");
+  if(!CODE||!CODE.config.length){
+    pill.textContent="none"; box.innerHTML="";
+    note.innerHTML="This OpMode has no <code>static</code> fields to tune. FTC Dashboard exposes <code>public static</code> fields of a class marked <code>@Config</code>.";
+    return;
+  }
+  pill.textContent=CODE.config.length+" field"+(CODE.config.length===1?"":"s");
+  note.innerHTML=CODE.hasConfigAnnotation
+    ?"The class has <code>@Config</code>, so FTC Dashboard lists these too. Edits apply live — press INIT to start from the source values."
+    :"Edits apply live. Note the class has no <code>@Config</code>, so FTC Dashboard itself won't list these until you add it.";
+  box.innerHTML=CODE.config.map(f=>{
+    const v=Sim.vars[f.name]!==undefined?Sim.vars[f.name]:0;
+    const input=f.type==="boolean"
+      ?`<input type="checkbox" data-cv="${esc(f.name)}"${v?" checked":""} aria-label="${esc(f.name)}">`
+      :`<input class="mini" type="number" step="${/int|long/.test(f.type)?1:"any"}" data-cv="${esc(f.name)}" value="${esc(fmtNum(v))}" aria-label="${esc(f.name)}">`;
+    return `<div class="cv-row${CONFIG_OVR[f.name]!==undefined?" edited":""}" data-cvrow="${esc(f.name)}">
+      <div class="cv-name">${esc(f.name)}<small>${esc((f.isPublic?"public static ":"static ")+f.type)}</small></div>
+      ${input}<button class="cv-reset" data-cvreset="${esc(f.name)}" title="Back to the value in the source" aria-label="Reset ${esc(f.name)}">↺</button></div>`;
+  }).join("");
+  $$("#cfgVars [data-cv]").forEach(inp=>inp.addEventListener("change",()=>{
+    const name=inp.dataset.cv, f=CODE.config.filter(x=>x.name===name)[0]; if(!f) return;
+    let v=inp.type==="checkbox"?(inp.checked?1:0):parseFloat(inp.value);
+    if(!isFinite(v)) return;
+    if(/int|long/.test(f.type)) v=Math.round(v);
+    CONFIG_OVR[name]=v; Sim.vars[name]=v;
+    inp.closest(".cv-row").classList.add("edited");
+  }));
+  $$("#cfgVars [data-cvreset]").forEach(b=>b.addEventListener("click",()=>{
+    const name=b.dataset.cvreset; delete CONFIG_OVR[name];
+    const src=CODE.vars[name]!==undefined?CODE.vars[name]:0;
+    Sim.vars[name]=src; renderConfigVars();
+  }));
+}
+function updateConfigValues(){
+  $$("#cfgVars [data-cv]").forEach(inp=>{
+    if(document.activeElement===inp) return;
+    const v=Sim.vars[inp.dataset.cv]; if(v===undefined) return;
+    if(inp.type==="checkbox") inp.checked=!!v;
+    else { const t=fmtNum(v); if(inp.value!==t) inp.value=t; }
+  });
+}
+
+/* ============================================================
+   GRAPH — telemetry and actuators over time
+   One y-axis per chart: wide-range values (encoder counts) and unit-range
+   values (servo position, motor power) get separate charts on a shared
+   time axis rather than two scales on one plot.
+   ============================================================ */
+const Graph={
+  win:30, paused:false, series:new Map(), t0:0, hoverT:null, maxSlots:8,
+  reset(){ this.series.clear(); this.t0=performance.now()/1000; this.hoverT=null; this.renderLegend(); this.draw(); },
+  now(){ return performance.now()/1000-this.t0; },
+  slotFor(s){
+    if(s.slot!=null) return s.slot;
+    const used={}; this.series.forEach(x=>{ if(x.slot!=null) used[x.slot]=1; });
+    for(let i=0;i<this.maxSlots;i++) if(!used[i]){ s.slot=i; return i; }
+    let victim=null; this.series.forEach(x=>{ if(!victim&&x.slot!=null&&!x.on) victim=x; });
+    if(victim){ s.slot=victim.slot; victim.slot=null; return s.slot; }
+    return null;
+  },
+  push(key,label,sub,v,defaultOn,wide){
+    let s=this.series.get(key);
+    if(!s){
+      s={key,label,sub,on:false,slot:null,data:[],wide:!!wide};
+      this.series.set(key,s);
+      if(defaultOn&&this.slotFor(s)!=null) s.on=true;
+      this.legendDirty=true;
+    }
+    if(Math.abs(v)>2&&!s.wide){ s.wide=true; }
+    const t=this.now();
+    s.data.push(t,v);
+    while(s.data.length>2&&s.data[0]<t-62) s.data.splice(0,2);
+    s.last=v;
+  },
+  sample(){
+    if(this.paused||!CODE||Sim.phase==="empty") return;
+    const env=Sim.env(); let telCount=0;
+    for(const t of CODE.telemetry) if(t.kind==="addData"){
+      const v=telemetryValue(t,env);
+      if(typeof v==="number"){ this.push("tel:"+t.label,t.label.trim(),"telemetry",v,true,false); telCount++; }
+    }
+    for(const d of CODE.devices){
+      const s=Sim.dev[d.name]; if(!s||!/Servo|DcMotor/i.test(d.type||"")) continue;
+      if(s.kind==="servo") this.push("pos:"+d.name,d.name,"servo position",s.act,telCount===0,false);
+      else{
+        this.push("pow:"+d.name,d.name,"motor power",s.act,false,false);
+        this.push("tick:"+d.name,d.name,"encoder counts",s.ticks,false,true);
+      }
+    }
+    if(this.legendDirty){ this.legendDirty=false; this.renderLegend(); }
+  },
+  color(slot){ return getComputedStyle(document.documentElement).getPropertyValue("--s"+(slot+1)).trim()||"#888"; },
+  renderLegend(){
+    const el=$("#legend"); if(!el) return;
+    const list=[...this.series.values()];
+    if(!list.length){ el.innerHTML=""; return; }
+    const order={"telemetry":0,"servo position":1,"motor power":2,"encoder counts":3};
+    list.sort((a,b)=>(order[a.sub]-order[b.sub])||a.label.localeCompare(b.label));
+    el.innerHTML=list.map(s=>`<label class="lg-row${s.on?"":" off"}">
+        <input type="checkbox" data-lg="${esc(s.key)}"${s.on?" checked":""}>
+        <i style="background:${s.on&&s.slot!=null?this.color(s.slot):"transparent"};${s.on?"":"box-shadow:inset 0 0 0 1px var(--line)"}"></i>
+        <span class="lg-name">${esc(s.label)} <small>${esc(s.sub)}</small></span>
+        <span class="lg-v" data-lgv="${esc(s.key)}">—</span></label>`).join("")+
+      `<div class="lg-note" id="lgNote">Up to ${this.maxSlots} series at once. Each keeps its colour while it's on.</div>`;
+    $$("#legend [data-lg]").forEach(cb=>cb.addEventListener("change",()=>{
+      const s=this.series.get(cb.dataset.lg); if(!s) return;
+      if(cb.checked){ if(this.slotFor(s)==null){ cb.checked=false; $("#lgNote").textContent="Already showing "+this.maxSlots+" series — turn one off first."; return; } s.on=true; }
+      else s.on=false;
+      this.renderLegend(); this.draw();
+    }));
+    this.updateLegendValues();
+  },
+  updateLegendValues(){
+    $$("#legend [data-lgv]").forEach(el=>{ const s=this.series.get(el.dataset.lgv); if(s&&s.last!=null) el.textContent=fmtNum(s.last); });
+  },
+  groups(){
+    const on=[...this.series.values()].filter(s=>s.on&&s.slot!=null);
+    return [{id:"wide", title:"Counts & wide-range values", list:on.filter(s=>s.wide)},
+            {id:"norm", title:"Positions & power  (−1 … 1)", list:on.filter(s=>!s.wide)}].filter(g=>g.list.length);
+  },
+  layout(){
+    const box=$("#charts"); if(!box) return [];
+    const groups=this.groups();
+    const sig=groups.map(g=>g.id).join("|");
+    if(box.dataset.sig!==sig){
+      box.dataset.sig=sig;
+      box.innerHTML=groups.length?groups.map(g=>`<div class="chart" data-chart="${g.id}"><h4>${esc(g.title)}</h4><canvas></canvas><div class="tip" hidden></div></div>`).join("")
+        :`<div class="chart-empty">${CODE?"Turn on a series below, or press START and drive — values appear as the OpMode runs.":"Load an OpMode to graph it."}</div>`;
+      $$("#charts .chart canvas").forEach(cv=>{
+        cv.addEventListener("pointermove",e=>{ const r=cv.getBoundingClientRect(); this.hoverX=(e.clientX-r.left)/r.width; this.hoverChart=cv.parentElement.dataset.chart; this.draw(); });
+        cv.addEventListener("pointerleave",()=>{ this.hoverX=null; this.draw(); });
+      });
+    }
+    return groups;
+  },
+  draw(){
+    if(!paneVisible("graph")) return;
+    const groups=this.layout(); if(!groups.length) return;
+    const css=getComputedStyle(document.documentElement);
+    const ink2=css.getPropertyValue("--tx-2").trim(), ink3=css.getPropertyValue("--tx-3").trim();
+    const grid=css.getPropertyValue("--grid").trim(), axis=css.getPropertyValue("--axis").trim();
+    const panel=css.getPropertyValue("--panel").trim();
+    const tNow=this.paused&&this.pausedAt!=null?this.pausedAt:this.now(), t0=tNow-this.win;
+    groups.forEach((g,gi)=>{
+      const wrap=document.querySelector(`[data-chart="${g.id}"]`); if(!wrap) return;
+      const cv=wrap.querySelector("canvas"), tip=wrap.querySelector(".tip");
+      const last=gi===groups.length-1;
+      const W=cv.clientWidth||300, H=last?168:146, dpr=Math.min(devicePixelRatio||1,2);
+      cv.style.height=H+"px";
+      if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){ cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr); }
+      const ctx=cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+      const L=46, R=66, T=8, B=last?22:8, pw=W-L-R, ph=H-T-B;
+      // y domain from what's visible in the window
+      let lo=Infinity, hi=-Infinity;
+      for(const s of g.list) for(let i=0;i<s.data.length;i+=2){ if(s.data[i]<t0) continue; const v=s.data[i+1]; if(v<lo)lo=v; if(v>hi)hi=v; }
+      if(!isFinite(lo)){ lo=0; hi=1; }
+      if(g.id==="norm"){ lo=Math.min(lo,0); hi=Math.max(hi,lo<0?1:1); if(lo<0) lo=Math.min(lo,-1); }
+      else { if(lo>0&&lo<hi*0.3) lo=0; if(hi<0&&hi>lo*0.3) hi=0; }
+      if(hi-lo<1e-9){ hi+=1; lo-=1; }
+      const span=hi-lo, raw=span/4, mag=Math.pow(10,Math.floor(Math.log10(raw))), f=raw/mag;
+      const step=(f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*mag;
+      lo=Math.floor(lo/step)*step; hi=Math.ceil(hi/step)*step;
+      const X=t=>L+(t-t0)/this.win*pw, Y=v=>T+(1-(v-lo)/(hi-lo))*ph;
+      // grid and y labels
+      ctx.lineWidth=1; ctx.font="10px "+css.getPropertyValue("--mono"); ctx.textBaseline="middle";
+      for(let v=lo; v<=hi+step*0.5; v+=step){
+        const y=Math.round(Y(v))+0.5;
+        ctx.strokeStyle=Math.abs(v)<step*1e-6?axis:grid; ctx.beginPath(); ctx.moveTo(L,y); ctx.lineTo(L+pw,y); ctx.stroke();
+        ctx.fillStyle=ink3; ctx.textAlign="right"; ctx.fillText(fmtTick(v,step),L-6,y);
+      }
+      if(last){
+        ctx.textAlign="center"; ctx.textBaseline="top";
+        const marks=this.win<=10?[10,5,0]:this.win<=30?[30,20,10,0]:[60,45,30,15,0];
+        for(const m of marks){ const x=X(tNow-m); ctx.fillStyle=ink3; ctx.fillText(m===0?"now":"−"+m+" s",x,T+ph+6); }
+      }
+      // lines
+      ctx.save(); ctx.beginPath(); ctx.rect(L,T-2,pw,ph+4); ctx.clip();
+      ctx.lineJoin="round"; ctx.lineCap="round"; ctx.lineWidth=2;
+      for(const s of g.list){
+        ctx.strokeStyle=this.color(s.slot); ctx.beginPath(); let started=false;
+        for(let i=0;i<s.data.length;i+=2){
+          if(s.data[i]<t0-1) continue;
+          const x=X(s.data[i]), y=Y(s.data[i+1]);
+          if(!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+      // endpoint marks and direct labels, nudged apart
+      const ends=g.list.filter(s=>s.data.length).map(s=>({s, x:X(s.data[s.data.length-2]), y:Y(s.data[s.data.length-1])}));
+      ends.sort((a,b)=>a.y-b.y);
+      for(let i=1;i<ends.length;i++) if(ends[i].ly==null){ ends[i].ly=Math.max(ends[i].y,(ends[i-1].ly!=null?ends[i-1].ly:ends[i-1].y)+12); }
+      ctx.textAlign="left"; ctx.textBaseline="middle";
+      ends.forEach(e=>{
+        ctx.fillStyle=this.color(e.s.slot); ctx.strokeStyle=panel; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(Math.min(e.x,L+pw),e.y,4,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        if(g.list.length<=4){ ctx.fillStyle=ink2; ctx.fillText(e.s.label.slice(0,10),L+pw+8,Math.min(T+ph,Math.max(T,e.ly!=null?e.ly:e.y))); }
+      });
+      // crosshair and tooltip
+      if(this.hoverX!=null){
+        const x=L+Math.max(0,Math.min(1,(this.hoverX*W-L)/pw))*pw, t=t0+(x-L)/pw*this.win;
+        ctx.strokeStyle=ink3; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5,T); ctx.lineTo(Math.round(x)+0.5,T+ph); ctx.stroke();
+        if(this.hoverChart===g.id){
+          const rows=g.list.map(s=>{ let best=null,bd=1e9; for(let i=0;i<s.data.length;i+=2){ const d=Math.abs(s.data[i]-t); if(d<bd){bd=d;best=s.data[i+1];} } return {s,v:best}; });
+          tip.hidden=false;
+          tip.innerHTML=`<div class="tt">${(tNow-t).toFixed(1)} s ago</div>`+rows.map(r=>`<div class="tr"><i style="background:${this.color(r.s.slot)}"></i><span>${esc(r.s.label)}</span><span>${r.v==null?"—":esc(fmtNum(r.v))}</span></div>`).join("");
+          const tw=tip.offsetWidth||140;
+          tip.style.left=Math.max(0,Math.min(W-tw,x+(x>W/2?-tw-10:10)))+"px"; tip.style.top="22px";
+        } else tip.hidden=true;
+      } else tip.hidden=true;
+    });
+  }
+};
+function fmtTick(v,step){
+  if(Math.abs(v)>=10000) return (v/1000).toFixed(0)+"k";
+  // as many decimals as the step needs: 0.25 → 2, 0.5 → 1, 2 → 0
+  let d=0; while(d<4&&Math.abs(Math.round(step*Math.pow(10,d))-step*Math.pow(10,d))>1e-6) d++;
+  return v.toFixed(d);
+}
+
+/* ============================================================
+   THEME — dark by default; the choice is remembered
+   ============================================================ */
+const SUN='<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.2" fill="currentColor"/><g stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3 3l1.1 1.1M11.9 11.9L13 13M3 13l1.1-1.1M11.9 4.1L13 3"/></g></svg>';
+const MOON='<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.6 10.2A6 6 0 0 1 5.8 2.4a6 6 0 1 0 7.8 7.8z" fill="currentColor"/></svg>';
+const currentTheme=()=>document.documentElement.getAttribute("data-theme")==="light"?"light":"dark";
+function setTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  store.set("ftcbench.theme",t);
+  const b=$("#themeBtn"); if(!b) return;
+  const next=t==="dark"?"light":"dark";
+  b.innerHTML=t==="dark"?SUN:MOON;
+  b.setAttribute("aria-label","Switch to "+next+" theme"); b.title="Switch to "+next+" theme";
+  Graph.draw();
+}
+
+/* ============================================================
+   COMPARE TWO OPMODES
+   ============================================================ */
+function renderCompareSelects(){
+  const opts=LIBRARY.filter(e=>e.code).map(e=>`<option value="${esc(e.id)}">${esc(opName(e))} — ${esc(e.file)}</option>`).join("");
+  const a=$("#cmpA"), b=$("#cmpB"), va=a.value, vb=b.value;
+  a.innerHTML=opts; b.innerHTML=opts;
+  a.value=entry(va)?va:(CURRENT_ID||"");
+  const other=LIBRARY.filter(e=>e.code&&e.id!==a.value&&opKind(e)===opKind(entry(a.value)||{}))[0]||LIBRARY.filter(e=>e.code&&e.id!==a.value)[0];
+  b.value=entry(vb)&&vb!==a.value?vb:(other?other.id:a.value);
+  if(paneVisible("compare")) renderCompare();
+}
+function renderCompare(){
+  const A=entry($("#cmpA").value), B=entry($("#cmpB").value), box=$("#compare");
+  if(!A||!B||!A.code||!B.code){ box.innerHTML=`<p class="cmp-note">Load a second OpMode to compare against — two versions of the same TeleOp is the usual case.</p>`; return; }
+  if(A.id===B.id){ box.innerHTML=`<p class="cmp-note">Pick two different OpModes.</p>`; return; }
+  const d=diffOpModes(A.code,B.code), S=d.summary;
+  const rank={changed:0,added:1,removed:2,same:3};
+  const rows=d.controls.slice().sort((x,y)=>rank[x.status]-rank[y.status]);
+  const side=list=>list.length?list.map(esc).join("<br>"):"<em>nothing</em>";
+  box.innerHTML=`<div class="cmp-sum">
+      <span class="pill${S.changed?" warnp":""}">${S.changed} changed</span>
+      <span class="pill${S.added?" live":""}">${S.added} only in B</span>
+      <span class="pill${S.removed?" failp":""}">${S.removed} only in A</span>
+      <span class="pill">${S.same} same</span></div>
+    <div class="cmp-sec"><h4>Controls</h4>${rows.length?rows.map(r=>`<div class="cmp-row ${r.status}">
+        <div class="ctl">${esc(r.control)} <span class="st">${r.status==="added"?"only in B":r.status==="removed"?"only in A":r.status}</span></div>
+        <div class="side">${side(r.a)}</div><div class="side">${side(r.b)}</div></div>`).join(""):`<p class="hint">Neither OpMode reads a gamepad.</p>`}</div>
+    ${(d.devices.added.length||d.devices.removed.length)?`<div class="cmp-sec"><h4>Devices</h4>
+      ${d.devices.removed.length?`<div class="cmp-row removed"><div class="ctl">only in A</div><div class="side">${d.devices.removed.map(esc).join(", ")}</div></div>`:""}
+      ${d.devices.added.length?`<div class="cmp-row added"><div class="ctl">only in B</div><div class="side">${d.devices.added.map(esc).join(", ")}</div></div>`:""}</div>`:""}
+    ${d.values.length?`<div class="cmp-sec"><h4>Values</h4>${d.values.map(v=>`<div class="cmp-row changed">
+        <div class="ctl">${esc(v.name)}</div><div class="side">${v.a===undefined?"<em>not declared</em>":esc(fmtNum(v.a))}</div><div class="side">${v.b===undefined?"<em>not declared</em>":esc(fmtNum(v.b))}</div></div>`).join("")}</div>`:""}`;
+}
+
+/* ============================================================
+   ORCHESTRATION
+   ============================================================ */
+function renderLegend3D(){
+  const COL={"revolute-yaw":"#E0A42E","revolute-lift":"#4D9FFF","effector":"#3FB68B","linear":"#8C9EFF","fixed":"#8899AA"};
+  const shown=CAD.mechs.filter(m=>m.kind!=="fixed").slice(0,6);
+  $("#vpLegend").innerHTML=shown.map(m=>{
+    const n=rigCarries(CAD.mechs,m.id).length;
+    return `<span><i style="background:${COL[m.kind]||"#8899AA"}"></i>${esc(mlabel(m))} · ${JOINT_KINDS[m.kind].label}${n?" +"+n:""}</span>`;
+  }).join("")+(Sim.drivetrain&&Sim.drivetrain.ok?`<span><i style="background:#C3CEDB"></i>drive base · ${Sim.drivetrain.style}</span>`:"");
+  $("#pip").hidden=!liftState().aS;
+}
+function analyzeAll(){
+  if(!CODE||!CAD) return;
   FINDINGS=analyze(CODE,CAD,MAP,OPTS);
-  renderFindings(); renderTables(); renderRig();
-  Sim.reset(CODE,CAD,MAP,OPTS);
-  buildGauges(); renderPad();
-  const COL={"revolute-yaw":"#E0A42E","revolute-lift":"#4D9FFF","effector":"#3FB68B",
-             "linear":"#8C9EFF","fixed":"#8899AA"};
-  $("#vpLegend").innerHTML=
-    `<span><i style="background:#8093A8"></i>frame · fixed</span>`+
-    CAD.mechs.map(m=>{
-      const n=rigCarries(CAD.mechs,m.id).length;
-      return `<span><i style="background:${COL[m.kind]||"#8899AA"}"></i>${esc(mlabel(m))} · ${JOINT_KINDS[m.kind].label}${n?" +"+n:""}</span>`;
-    }).join("")+
-    (Sim.drivetrain&&Sim.drivetrain.ok?`<span><i style="background:#C3CEDB"></i>drive base · ${Sim.drivetrain.style}</span>`:"");
+  renderFindings(); renderTables(); renderRig(); renderCoverage();
 }
-function loadCode(src,label){
-  $("#srcbox").value=src;
-  try{ CODE=parseJava(src); }
-  catch(e){ $("#codeStatus").textContent="couldn't parse: "+e.message;
-            $("#codeDrop").classList.remove("ok"); $("#codeDrop").classList.add("bad"); return; }
-  $("#codeDrop").classList.remove("bad"); $("#codeDrop").classList.add("ok");
-  $("#codeStatus").textContent=label+(CODE.opmode?'  ·  "'+CODE.opmode+'"':"");
-  MAP=autoMap(CODE.devices,CAD.mechs);
-  rebuild();
+/* Rebuild the simulation after a rig or hardware change, keeping the Driver
+   Station where it was — a running OpMode restarts, like re-deploying code. */
+function reloadSim(){
+  if(!CODE||!CAD) return;
+  const phase=Sim.phase;
+  Sim.load(CODE,CAD,MAP,withPose()); applyConfigOverrides();
+  if(phase!=="stopped"){ Sim.init(); applyConfigOverrides(); }
+  if(phase==="running") Sim.start();
+  buildGauges(); renderPad(); renderLegend3D(); updateDS();
+}
+function rebuild(){ analyzeAll(); reloadSim(); }
+function syncOptionControls(){
+  $$("#trustSeg button").forEach(b=>b.classList.toggle("on",b.dataset.trust===OPTS.trust));
+  $("#trustNote").textContent=OPTS.trust==="code"
+    ?"Servo and motor types come from your declarations and comments. The CAD is used for geometry only."
+    :"Servo and motor types come from the part numbers in the STEP assembly.";
+  const g=Math.round(OPTS.payloadKg*1000), d=Math.round(OPTS.duty*100), t=Math.round((View.turretScale||0.55)*100);
+  $("#massSlider").value=g; $("#massVal").textContent=g+" g";
+  $("#dutySlider").value=d; $("#dutyVal").textContent=d+" %";
+  $("#turretSlider").value=t; $("#turretVal").textContent=t+" %";
 }
 function loadCAD(cad,label,cls){
   CAD=cad;
-  $("#cadStatus").textContent=label;
-  $("#cadDrop").className="drop "+(cls||"ok");
-  $("#vpTitle").textContent=(cad.name||label)+"  ·  "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s");
+  $("#cadStatus").textContent=label; $("#cadDrop").className="drop "+(cls||"ok");
+  $("#vpTitle").textContent=(cad.name||label)+" · "+(cad.points?cad.points.length.toLocaleString():"0")+" pts · "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s");
   const b=cad.bbox, mm=v=>(v*1000).toFixed(0);
   $("#vpDims").textContent=`${mm(b.max[0]-b.min[0])} × ${mm(b.max[1]-b.min[1])} × ${mm(b.max[2]-b.min[2])} mm`;
-  $("#geoPill").textContent=(cad.points?cad.points.length.toLocaleString():"0")+" pts";
-  $("#unitPill").textContent=cad.units==="METRE"?"m → mm":"mm";
-  if(CODE) MAP=autoMap(CODE.devices,CAD.mechs);
-  const restored=loadSavedRig();          // your edits for this CAD come back
+  RIG_DEVICES={}; HW_USER={};
+  const restored=loadSavedRig();
   View.load(cad);
-  if(CODE) rebuild();
-  if(restored) $("#cadStatus").textContent=label+"  ·  rig restored";
+  if(CODE){ MAP=autoMap(CODE.devices,CAD.mechs); applyDeviceMemory(); rebuild(); }
+  if(restored) $("#cadStatus").textContent=label+" · rig restored";
+  syncOptionControls();
 }
 
-/* ---------- intake ---------- */
-function wireDrop(dropEl,inputEl,handler){
-  const open=()=>inputEl.click();
-  dropEl.addEventListener("click",e=>{ if(e.target!==inputEl) open(); });
-  dropEl.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();open();} });
-  ["dragenter","dragover"].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.add("armed");}));
-  ["dragleave","drop"].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.remove("armed");}));
-  dropEl.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) handler(f); });
-  inputEl.addEventListener("change",e=>{ const f=e.target.files[0]; if(f) handler(f); inputEl.value=""; });
+/* ============================================================
+   FILE INTAKE — click, drop on a target, or drop anywhere
+   ============================================================ */
+function readText(file,cb,err){
+  const r=new FileReader();
+  r.onerror=()=>err&&err("couldn't read "+file.name);
+  r.onload=()=>cb(r.result);
+  r.readAsText(file);
 }
 function takeCAD(file){
-  $("#cadStatus").textContent="reading "+file.name+" …";
-  const r=new FileReader();
-  r.onerror=()=>{ $("#cadStatus").textContent="couldn't read "+file.name; };
-  r.onload=()=>{
-    const mb=(r.result.length/1048576).toFixed(1);
+  $("#cadStatus").textContent="reading "+file.name+" …"; $("#cadDrop").className="drop";
+  readText(file,text=>{
+    const mb=(text.length/1048576).toFixed(1);
     $("#cadStatus").textContent="parsing "+mb+" MB …";
     setTimeout(()=>{
       try{
-        const cad=parseSTEP(r.result,msg=>{$("#cadStatus").textContent=msg;});
+        const cad=parseSTEP(text,msg=>{ $("#cadStatus").textContent=msg; });
         cad.name=file.name;
-        if(!cad.mechs.length)
-          loadCAD(cad, file.name+" — geometry loaded, no actuators recognized", "bad");
-        else
-          loadCAD(cad, file.name+"  ·  "+mb+" MB  ·  "+cad.mechs.length+" mechanisms", "ok");
-      }catch(err){
-        $("#cadStatus").textContent="couldn't parse this STEP — "+err.message;
-        $("#cadDrop").className="drop bad";
-      }
+        loadCAD(cad, file.name+" · "+mb+" MB · "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s"), cad.mechs.length?"ok":"bad");
+      }catch(e){ $("#cadStatus").textContent="couldn't parse this STEP file — "+e.message; $("#cadDrop").className="drop bad"; }
     },30);
-  };
-  r.readAsText(file);
+  },m=>{ $("#cadStatus").textContent=m; });
 }
-function takeCode(file){
-  const r=new FileReader();
-  r.onerror=()=>{ $("#codeStatus").textContent="couldn't read "+file.name; };
-  r.onload=()=>loadCode(r.result,file.name);
-  r.readAsText(file);
+function takeCode(file){ readText(file,text=>addOpModeFromText(file.name,text)); }
+function setRobotConfig(text,name){
+  try{
+    const cfg=parseRobotConfig(text);
+    OPTS.robotConfig=cfg; ROBOT_CFG_NAME=name;
+    store.set("ftcbench.robotconfig",JSON.stringify({name,text}));
+    $("#cfgStatus").textContent=name+" · "+cfg.devices.length+" devices on "+cfg.modules.length+" hub"+(cfg.modules.length===1?"":"s");
+    $("#cfgDrop").className="drop ok"; $("#cfgClear").hidden=false;
+  }catch(e){
+    $("#cfgStatus").textContent="couldn't read "+name+" — "+e.message; $("#cfgDrop").className="drop bad";
+  }
+  analyzeAll();
+}
+function takeRobotConfig(file){ readText(file,text=>setRobotConfig(text,file.name)); }
+function routeFile(file){
+  const n=file.name.toLowerCase();
+  if(/\.(step|stp)$/.test(n)) takeCAD(file);
+  else if(/\.xml$/.test(n)) takeRobotConfig(file);
+  else takeCode(file);
+}
+function wireDrop(dropEl,inputEl,handler){
+  const open=()=>inputEl.click();
+  dropEl.addEventListener("click",e=>{ if(e.target!==inputEl) open(); });
+  dropEl.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  ["dragenter","dragover"].forEach(ev=>dropEl.addEventListener(ev,e=>{ e.preventDefault(); e.stopPropagation(); dropEl.classList.add("armed"); document.body.classList.remove("dragging"); }));
+  ["dragleave","drop"].forEach(ev=>dropEl.addEventListener(ev,e=>{ e.preventDefault(); dropEl.classList.remove("armed"); }));
+  dropEl.addEventListener("drop",e=>{ e.stopPropagation(); document.body.classList.remove("dragging"); const f=e.dataTransfer.files[0]; if(f) handler(f); });
+  inputEl.addEventListener("change",e=>{ const f=e.target.files[0]; if(f) handler(f); inputEl.value=""; });
+}
+function wirePageDrop(){
+  let depth=0;
+  addEventListener("dragenter",e=>{ if(e.dataTransfer&&[].indexOf.call(e.dataTransfer.types||[],"Files")>=0){ depth++; document.body.classList.add("dragging"); } });
+  addEventListener("dragleave",()=>{ depth=Math.max(0,depth-1); if(!depth) document.body.classList.remove("dragging"); });
+  addEventListener("dragover",e=>e.preventDefault());
+  addEventListener("drop",e=>{ e.preventDefault(); depth=0; document.body.classList.remove("dragging");
+    [].forEach.call((e.dataTransfer&&e.dataTransfer.files)||[],routeFile); });
 }
 
-/* ---------- keyboard ---------- */
-/* A/B/X/Y stay on the face buttons, so the sticks take the IJKL cluster
-   rather than WASD — otherwise A would mean two things at once. */
+/* ============================================================
+   KEYBOARD & USB GAMEPAD
+   ============================================================ */
 const KEYMAP={KeyA:"a",KeyB:"b",KeyX:"x",KeyY:"y",KeyQ:"left_bumper",KeyE:"right_bumper",
   ArrowUp:"dpad_up",ArrowDown:"dpad_down",ArrowLeft:"dpad_left",ArrowRight:"dpad_right"};
-const STICKKEYS={KeyI:["left_stick_y",-1],KeyK:["left_stick_y",1],
-                 KeyJ:["left_stick_x",-1],KeyL:["left_stick_x",1],
+const STICKKEYS={KeyI:["left_stick_y",-1],KeyK:["left_stick_y",1],KeyJ:["left_stick_x",-1],KeyL:["left_stick_x",1],
                  KeyU:["right_stick_x",-1],KeyO:["right_stick_x",1]};
-const typing=e=>{ const t=e.target.tagName;
-  return t==="TEXTAREA"||t==="INPUT"||t==="SELECT"||(e.target.dataset&&e.target.dataset.stick); };
-function knobTo(pad,axis,v){
+const typing=e=>{ const t=e.target.tagName; return t==="TEXTAREA"||t==="INPUT"||t==="SELECT"||(e.target.dataset&&e.target.dataset.stick)||(e.target.getAttribute&&e.target.getAttribute("role")==="tab"); };
+function knobTo(axis,v){
   for(const k of STICKS){
     if(k.ax!==axis&&k.ay!==axis) continue;
-    const knob=document.querySelector(`[data-knob="${k.id}"]`); if(!knob) continue;
-    const max=k.r-7;
-    if(k.ax===axis) knob.setAttribute("cx",k.cx+v*max);
-    else knob.setAttribute("cy",k.cy+v*max);
+    const knob=$(`[data-knob="${k.id}"]`); if(!knob) continue;
+    if(k.ax===axis) knob.setAttribute("cx",k.cx+v*(k.r-7)); else knob.setAttribute("cy",k.cy+v*(k.r-7));
   }
 }
 addEventListener("keydown",e=>{
-  if(typing(e)) return;
+  if(typing(e)||e.ctrlKey||e.metaKey||e.altKey) return;
   const sk=STICKKEYS[e.code];
-  if(sk){ e.preventDefault(); Sim.pad[activePad][sk[0]]=sk[1]; knobTo(activePad,sk[0],sk[1]); return; }
+  if(sk){ e.preventDefault(); Sim.pad[activePad][sk[0]]=sk[1]; knobTo(sk[0],sk[1]); return; }
   const b=KEYMAP[e.code]; if(!b) return;
   e.preventDefault(); Sim.pad[activePad][b]=true;
-  const el=document.querySelector(`[data-btn="${b}"]`); if(el) el.classList.add("down");
+  const el=$(`#padwrap [data-btn="${b}"]`); if(el) el.classList.add("down");
 });
 addEventListener("keyup",e=>{
-  if(typing(e)) return;
   const sk=STICKKEYS[e.code];
-  if(sk){ Sim.pad[activePad][sk[0]]=0; knobTo(activePad,sk[0],0); return; }
+  if(sk){ Sim.pad[activePad][sk[0]]=0; knobTo(sk[0],0); return; }
   const b=KEYMAP[e.code]; if(!b) return;
   Sim.pad[activePad][b]=false;
-  const el=document.querySelector(`[data-btn="${b}"]`); if(el) el.classList.remove("down");
+  const el=$(`#padwrap [data-btn="${b}"]`); if(el) el.classList.remove("down");
 });
-
-/* ---------- real USB pad ---------- */
 const HW_ORDER=["a","b","x","y","left_bumper","right_bumper","left_trigger","right_trigger",
-  "back","start","left_stick_button","right_stick_button","dpad_up","dpad_down","dpad_left","dpad_right"];
+  "back","start","left_stick_button","right_stick_button","dpad_up","dpad_down","dpad_left","dpad_right","guide"];
 let hwWas=null;
 function pollHW(){
   const gps=navigator.getGamepads?navigator.getGamepads():[];
@@ -652,109 +1074,166 @@ function pollHW(){
     const g=gps[i]; if(!g) continue; live=true;
     const pad=i+1;
     g.buttons.forEach((b,j)=>{ const n=HW_ORDER[j]; if(!n) return;
-      Sim.pad[pad][n]=b.pressed;
-      if(pad===activePad){ const el=document.querySelector(`[data-btn="${n}"]`);
-        if(el) el.classList.toggle("down",b.pressed); } });
+      // triggers are analog on the SDK: expose the value, not just pressed
+      Sim.pad[pad][n]=(n==="left_trigger"||n==="right_trigger")?b.value:b.pressed;
+      if(pad===activePad){ const el=$(`#padwrap [data-btn="${n}"]`); if(el) el.classList.toggle("down",b.pressed); } });
     const dz=v=>Math.abs(v)<0.08?0:v;
     if(g.axes.length>=4){
       Sim.pad[pad].left_stick_x=dz(g.axes[0]); Sim.pad[pad].left_stick_y=dz(g.axes[1]);
       Sim.pad[pad].right_stick_x=dz(g.axes[2]); Sim.pad[pad].right_stick_y=dz(g.axes[3]);
     }
   }
-  if(live!==hwWas){ hwWas=live;
-    const p=$("#hwPad"); p.textContent=live?"USB pad live":"no USB pad"; p.className="pill"+(live?" live":""); }
+  if(live!==hwWas){ hwWas=live; const p=$("#hwPad"); p.textContent=live?"USB pad live":"no USB pad"; p.className="pill"+(live?" live":""); }
 }
 
-/* ---------- main loop ---------- */
-let last=performance.now(), acc=0, slowAcc=0;
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+let last=performance.now(), acc=0, slowAcc=0, loopErr=null;
+function guarded(fn){ try{ fn(); }catch(e){ if(!loopErr){ loopErr=e; console.error("bench:",e); } } }
 function frame(now){
   const dt=Math.min(0.1,(now-last)/1000); last=now;
-  pollHW();
-  acc+=dt;
-  let guard=0;
-  while(acc>=0.02 && guard++<8){ Sim.tick(0.02); acc-=0.02; }
-  if(acc>0.5) acc=0;
-  updateGauges();
-  View.update();
+  guarded(()=>{
+    pollHW();
+    acc+=dt; let n=0;
+    while(acc>=0.02&&n++<8){ Sim.tick(0.02); acc-=0.02; }
+    if(acc>0.5) acc=0;
+    View.update(); View.render(); updateGauges();
+  });
   slowAcc+=dt;
-  if(slowAcc>=0.05){ slowAcc=0;
-    $("#mech").innerHTML=renderMech();
+  if(slowAcc>=0.05){ slowAcc=0; guarded(()=>{
+    Graph.sample(); Graph.draw(); Graph.updateLegendValues();
     $("#dsPanel").innerHTML=renderDS();
+    updateClock(); updateConfigValues();
+    const m=renderMech();
+    if(m){ $("#mech").innerHTML=m.svg; $("#pipDeg").textContent=m.deg+"° off level"; }
+    const c=Sim.chassis||{x:0,y:0,h:0};
+    $("#vpPose").textContent=`x ${c.x.toFixed(2)} m · y ${c.y.toFixed(2)} m · ${Math.round(c.h*180/Math.PI)}°`;
     const anyDown=Object.keys(Sim.pad[activePad]).some(k=>Sim.pad[activePad][k]);
-    $("#tickPill").textContent=anyDown?"commanding":"holding";
-    document.querySelectorAll(".bindrow").forEach(r=>{
-      const k=r.dataset.btn; r.classList.toggle("active",!!Sim.pad[activePad][k]); });
-  }
-  View.render();
+    const tp=$("#tickPill");
+    tp.textContent=Sim.phase==="running"?(anyDown?"commanding":"holding"):Sim.phase==="init"?"init positions":"idle";
+    const lp=$("#loopPill");
+    lp.textContent=Sim.phase==="running"?Sim.t.toFixed(1)+" s · 50 Hz":Sim.phase; lp.className="pill"+(Sim.phase==="running"?" live":"");
+    $$(".bindrow").forEach(r=>r.classList.toggle("active",!!Sim.pad[activePad][r.dataset.btn]));
+  }); }
   requestAnimationFrame(frame);
 }
 
-/* ---------- boot ---------- */
+/* ============================================================
+   BOOT
+   ============================================================ */
 (function boot(){
+  setTheme(store.get("ftcbench.theme","dark")==="light"?"light":"dark");
+  $("#themeBtn").addEventListener("click",()=>setTheme(currentTheme()==="dark"?"light":"dark"));
   View.init($("#viewport"));
+  View.setView("iso");
+  initTabs();
+  initLibrary();
+
+  try{ const rc=JSON.parse(store.get("ftcbench.robotconfig","null")); if(rc&&rc.text){ OPTS.robotConfig=parseRobotConfig(rc.text); ROBOT_CFG_NAME=rc.name;
+    $("#cfgStatus").textContent=rc.name+" · "+OPTS.robotConfig.devices.length+" devices"; $("#cfgDrop").className="drop ok"; $("#cfgClear").hidden=false; } }catch(e){}
+
   const sample=JSON.parse(JSON.stringify(SAMPLE_CAD));
   sample.points=synthGeometry();
   classifyMechs(sample.mechs);
   loadCAD(sample,"sample: fulll.step (measured)","ok");
-  loadCode(SAMPLE_JAVA,"WORKSHOPCODE.java");
 
+  const saved=store.get("ftcbench.current",null);
+  selectOpMode(entry(saved)?saved:"sample-claw");
+  renderCompareSelects();
+
+  // Driver Station
+  $("#btnInit").addEventListener("click",dsInit);
+  $("#btnStart").addEventListener("click",dsStart);
+  $("#btnStop").addEventListener("click",dsStop);
+  $("#opSelect").addEventListener("change",e=>selectOpMode(e.target.value));
+  $("#practice").checked=store.get("ftcbench.practice","0")==="1";
+  $("#practice").addEventListener("change",e=>{ store.set("ftcbench.practice",e.target.checked?"1":"0"); updateClock(); });
+
+  // code
+  $("#addOpMode").addEventListener("click",()=>$("#codeFile").click());
+  $("#codeFile").addEventListener("change",e=>{ [].forEach.call(e.target.files,takeCode); e.target.value=""; });
+  $("#reparse").addEventListener("click",()=>{
+    const e=entry(CURRENT_ID); if(!e) return;
+    e.source=$("#srcbox").value; parseEntry(e);
+    if(!e.builtin) saveLibrary();
+    selectOpMode(e.id);
+  });
+
+  // hardware
   wireDrop($("#cadDrop"),$("#cadFile"),takeCAD);
-  wireDrop($("#codeDrop"),$("#codeFile"),takeCode);
-  $("#reparse").addEventListener("click",()=>loadCode($("#srcbox").value,"pasted source"));
-  $("#resetSample").addEventListener("click",()=>loadCode(SAMPLE_JAVA,"WORKSHOPCODE.java"));
-  $("#loadDrive").addEventListener("click",()=>loadCode(DRIVE_JAVA,"MecanumTeleOp.java"));
-  $("#viewSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
-    [].forEach.call($("#viewSeg").children,x=>x.classList.toggle("on",x===b));
-    View.setView(b.dataset.v); });
-  $("#padSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
-    activePad=+b.dataset.pad;
-    [].forEach.call($("#padSeg").children,x=>x.classList.toggle("on",x===b));
-    renderPad(); });
+  wireDrop($("#cfgDrop"),$("#cfgFile"),takeRobotConfig);
+  wirePageDrop();
+  $("#cfgClear").addEventListener("click",()=>{
+    OPTS.robotConfig=null; ROBOT_CFG_NAME=null; store.del("ftcbench.robotconfig");
+    $("#cfgStatus").textContent="From the FIRST folder on the Control Hub. Every hardwareMap name gets checked.";
+    $("#cfgDrop").className="drop"; $("#cfgClear").hidden=true; analyzeAll();
+  });
   $("#trustSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
-    OPTS.trust=b.dataset.trust;
-    [].forEach.call($("#trustSeg").children,x=>x.classList.toggle("on",x===b));
-    $("#trustNote").textContent = OPTS.trust==="code"
-      ? "Servo/motor type comes from your declarations and comments. The CAD is used for geometry only."
-      : "Servo/motor type comes from the part numbers in the STEP assembly.";
-    rebuild(); saveRig(); });
-  $("#turretSlider").addEventListener("input",e=>{
-    View.turretScale=+e.target.value/100; $("#turretVal").textContent=e.target.value+" %";
-    View.load(CAD); });
+    OPTS.trust=b.dataset.trust; syncOptionControls(); rebuild(); saveRig(); });
+
+  // rig
+  $("#turretSlider").addEventListener("input",e=>{ View.turretScale=+e.target.value/100; $("#turretVal").textContent=e.target.value+" %"; View.load(CAD); saveRig(); });
   $("#addJoint").addEventListener("click",addManualJoint);
   $("#rigCopy").addEventListener("click",()=>{
-    const txt=JSON.stringify(exportRig(),null,1);
-    $("#rigJson").value=txt;
-    const done=ok=>{ const b=$("#rigCopy"); b.textContent=ok?"Copied":"Select & copy";
-      setTimeout(()=>{b.textContent="Copy";},1400); };
-    if(navigator.clipboard&&navigator.clipboard.writeText)
-      navigator.clipboard.writeText(txt).then(()=>done(true),()=>{ $("#rigJson").select(); done(false); });
+    const txt=JSON.stringify(exportRig(),null,1); $("#rigJson").value=txt;
+    const done=ok=>{ const b=$("#rigCopy"); b.textContent=ok?"Copied":"Select & copy"; setTimeout(()=>{ b.textContent="Copy"; },1400); };
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(()=>done(true),()=>{ $("#rigJson").select(); done(false); });
     else { $("#rigJson").select(); done(false); }
   });
   $("#rigApply").addEventListener("click",()=>{
+    const b=$("#rigApply");
     try{
       const r=JSON.parse($("#rigJson").value);
       if(r.format!=="ftc-sim-bench.rig") throw new Error("not a rig document");
-      applyRig(r); View.load(CAD); rebuild(); saveRig();
-      $("#rigApply").textContent="Applied"; setTimeout(()=>{$("#rigApply").textContent="Apply";},1400);
-    }catch(err){
-      $("#rigApply").textContent="Bad JSON"; setTimeout(()=>{$("#rigApply").textContent="Apply";},1800);
-    }
+      applyRig(r); applyDeviceMemory(); View.load(CAD); rebuild(); saveRig();
+      b.textContent="Applied"; setTimeout(()=>{ b.textContent="Apply"; },1400);
+    }catch(err){ b.textContent="Not a rig"; setTimeout(()=>{ b.textContent="Apply"; },1800); }
   });
   $("#rigReset").addEventListener("click",()=>{
-    try{ localStorage.removeItem(rigKey()); }catch(e){}
-    HW_USER={};
-    for(const m of CAD.mechs){ m.kind=m.hasActuator?null:"fixed"; m.leverOverride=null; m.label=null; }
+    store.del(rigKey()); HW_USER={}; RIG_DEVICES={};
+    for(const m of CAD.mechs){ m.kind=m.hasActuator===false?"fixed":null; m.leverOverride=null; m.label=null; }
     CAD.mechs=CAD.mechs.filter(m=>!m.manual);
     classifyMechs(CAD.mechs);
     if(CODE) MAP=autoMap(CODE.devices,CAD.mechs);
     rigChanged();
   });
-  $("#massSlider").addEventListener("input",e=>{
-    OPTS.payloadKg=+e.target.value/1000; $("#massVal").textContent=e.target.value+" g";
-    FINDINGS=analyze(CODE,CAD,MAP,OPTS); renderFindings(); Sim.opts=OPTS; saveRig(); });
-  $("#dutySlider").addEventListener("input",e=>{
-    OPTS.duty=+e.target.value/100; $("#dutyVal").textContent=e.target.value+" %";
-    FINDINGS=analyze(CODE,CAD,MAP,OPTS); renderFindings(); Sim.opts=OPTS; saveRig(); });
 
+  // config
+  $("#massSlider").addEventListener("input",e=>{ OPTS.payloadKg=+e.target.value/1000; $("#massVal").textContent=e.target.value+" g"; analyzeAll(); saveRig(); });
+  $("#dutySlider").addEventListener("input",e=>{ OPTS.duty=+e.target.value/100; $("#dutyVal").textContent=e.target.value+" %"; analyzeAll(); saveRig(); });
+
+  // stage & dock
+  $("#viewSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    $$("#viewSeg button").forEach(x=>x.classList.toggle("on",x===b)); View.setView(b.dataset.v); });
+  $("#resetPose").addEventListener("click",()=>{ Sim.chassis={x:0,y:0,h:0}; OPTS.startPose={x:0,y:0,h:0}; });
+  $("#padSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    activePad=+b.dataset.pad; $$("#padSeg button").forEach(x=>x.classList.toggle("on",x===b)); renderPad(); });
+
+  // graph & compare
+  $("#winSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    Graph.win=+b.dataset.w; $$("#winSeg button").forEach(x=>x.classList.toggle("on",x===b)); Graph.draw(); });
+  $("#graphPause").addEventListener("click",()=>{ Graph.paused=!Graph.paused; Graph.pausedAt=Graph.paused?Graph.now():null;
+    $("#graphPause").textContent=Graph.paused?"Resume":"Pause"; });
+  $("#graphClear").addEventListener("click",()=>Graph.reset());
+  $("#cmpA").addEventListener("change",renderCompare);
+  $("#cmpB").addEventListener("change",renderCompare);
+
+  addEventListener("resize",()=>{ View.resize(); Graph.draw(); });
+  if(typeof ResizeObserver!=="undefined") new ResizeObserver(()=>View.resize()).observe($("#viewport"));
+
+  /* Link straight into a state: ?opmode=sample-auto&start=1&view=field&right=graph
+     — for demo links in a README, or sharing "look at this" with a teammate. */
+  try{
+    const q=new URLSearchParams(location.search);
+    if(q.get("opmode")&&entry(q.get("opmode"))) selectOpMode(q.get("opmode"));
+    const v=q.get("view");
+    if(v&&/^(iso|front|side|top|field)$/.test(v)){ View.setView(v); $$("#viewSeg button").forEach(x=>x.classList.toggle("on",x.dataset.v===v)); }
+    ["left","right"].forEach(side=>{ const t=q.get(side), nav=$(`.tabs[data-tabs="${side}"]`);
+      if(t&&nav&&nav.querySelector(`button[data-tab="${t}"]`)) selectTab(nav,t); });
+    if(q.get("start")==="1") dsStart();
+  }catch(e){}
+
+  saveRig();
   requestAnimationFrame(frame);
 })();

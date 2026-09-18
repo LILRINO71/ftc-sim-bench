@@ -41,10 +41,28 @@ const View={
     const size=Math.max(bb.max[0]-bb.min[0],bb.max[1]-bb.min[1],bb.max[2]-bb.min[2])||0.5;
     this.size=size; this.cad=cad;
 
-    // ---- field floor
-    const grid=new THREE.GridHelper(3.66,24,0x33414F,0x1B2430);
-    grid.position.y=bb.min[2]-this.c[2];
-    this.world.add(grid); this.grid=grid;
+    // ---- the FTC field: 12 ft square, 6 × 6 foam tiles, perimeter wall
+    const FIELD=3.6576, WALL=0.31;
+    const floorY=bb.min[2]-this.c[2];
+    this.floorY=floorY;
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(FIELD,FIELD),
+      new THREE.MeshBasicMaterial({color:0x252c35}));
+    floor.rotation.x=-Math.PI/2; floor.position.y=floorY-0.003;
+    this.world.add(floor);
+    const seams=new THREE.GridHelper(FIELD,6,0x4a5664,0x4a5664);
+    seams.position.y=floorY;
+    this.world.add(seams);
+    const wall=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(FIELD,WALL,FIELD)),
+      new THREE.LineBasicMaterial({color:0x5b6776}));
+    wall.position.y=floorY+WALL/2;
+    this.world.add(wall);
+    // a start mark under the robot's home position
+    const ring=new THREE.Mesh(new THREE.RingGeometry(size*0.62,size*0.66,48),
+      new THREE.MeshBasicMaterial({color:0x4D9FFF,transparent:true,opacity:0.35,side:THREE.DoubleSide}));
+    ring.rotation.x=-Math.PI/2; ring.position.y=floorY+0.002;
+    this.world.add(ring);
+    this.fieldSize=FIELD;
+    this.look=new THREE.Vector3(0,0,0);
 
     // ---- chassis group carries everything that drives around
     this.chassisG=new THREE.Group(); this.world.add(this.chassisG);
@@ -190,6 +208,8 @@ const View={
     }
   },
   setView(v){
+    this.mode=v;
+    if(v==="field"){ this.theta=-Math.PI/2; this.phi=0.72; this.rad=(this.fieldSize||3.66)*1.2; return; }
     if(v==="front"){ this.theta=-Math.PI/2; this.phi=Math.PI/2; }
     else if(v==="side"){ this.theta=0; this.phi=Math.PI/2; }
     else if(v==="top"){ this.theta=-Math.PI/2; this.phi=0.09; }
@@ -198,9 +218,16 @@ const View={
   },
   render(){
     if(!this.cam) return;
+    // robot views follow the chassis as it drives; the field view holds still
+    const target=new THREE.Vector3(0,0,0);
+    if(this.mode!=="field"&&this.chassisG) target.copy(this.chassisG.position);
+    if(!this.look) this.look=target.clone();
+    this.look.lerp(target,0.18);
     const r=this.rad;
-    this.cam.position.set(r*Math.sin(this.phi)*Math.cos(this.theta), r*Math.cos(this.phi)+this.size*0.12, r*Math.sin(this.phi)*Math.sin(this.theta));
-    this.cam.lookAt(0,0,0);
+    this.cam.position.set(this.look.x+r*Math.sin(this.phi)*Math.cos(this.theta),
+                          this.look.y+r*Math.cos(this.phi)+this.size*0.12,
+                          this.look.z+r*Math.sin(this.phi)*Math.sin(this.theta));
+    this.cam.lookAt(this.look);
     this.ren.render(this.scene,this.cam);
   }
 };

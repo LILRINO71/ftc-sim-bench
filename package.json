@@ -1,6 +1,6 @@
 {
   "name": "ftc-sim-bench",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Drop in any FTC robot's STEP CAD and any OpMode: the bench resolves the assembly, interprets the code at 50 Hz, and lets you drive the result with a virtual gamepad.",
   "license": "MIT",

@@ -1,148 +1,221 @@
-<div class="wrap">
+<div class="app" id="app">
 
-<header class="top">
-  <div class="brand"><h1>FTC Sim Bench</h1><span class="ver">CAD × OPMODE · v2.0</span></div>
-  <p class="tagline">Drop in any robot's CAD and any OpMode. The bench reads the assembly, interprets your code, and lets you drive the result &mdash; base, arm and all.</p>
-</header>
+  <!-- ===================== Driver Station bar ===================== -->
+  <header class="dsbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="2" y="9" width="28" height="15" rx="7.5" class="bm-body"/>
+        <circle cx="10" cy="16.5" r="3" class="bm-dot"/><circle cx="21.5" cy="14.5" r="1.8" class="bm-dot"/><circle cx="24.5" cy="18" r="1.8" class="bm-dot"/>
+      </svg>
+      <div class="brand-text"><b>FTC Sim Bench</b><span>CAD × OpMode</span></div>
+    </div>
 
-<div class="zone-label"><span class="n">1</span><h2>Bench</h2><span class="hint">CAD in, code in, cross-check out</span></div>
+    <div class="op-pick">
+      <label for="opSelect">OpMode</label>
+      <div class="op-select-wrap">
+        <select id="opSelect" aria-label="OpMode"></select>
+        <span class="kind" id="opKind">TeleOp</span>
+      </div>
+    </div>
 
-<div class="bench">
-  <div class="stack">
-    <section class="panel">
-      <div class="phead"><h2>Inputs</h2><span class="spacer"></span><span class="pill" id="unitPill">&mdash;</span></div>
-      <div class="pbody" style="display:flex;flex-direction:column;gap:10px;">
+    <div class="ds-controls" role="group" aria-label="Driver Station controls">
+      <button class="ds-btn" id="btnInit">INIT</button>
+      <button class="ds-btn go" id="btnStart"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1l7 4-7 4z"/></svg>START</button>
+      <button class="ds-btn stop" id="btnStop"><svg viewBox="0 0 10 10" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="7" rx="1"/></svg>STOP</button>
+    </div>
+
+    <div class="ds-clock-wrap">
+      <div class="ds-clock" id="dsClock" aria-live="off">2:00</div>
+      <div class="ds-clock-bar"><i id="dsBar"></i></div>
+    </div>
+    <label class="practice"><input type="checkbox" id="practice"> no time limit</label>
+
+    <div class="ds-status">
+      <span class="pill" id="phasePill">—</span>
+      <span class="pill" id="hwPad">no USB pad</span>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Switch to light theme" title="Switch to light theme"></button>
+    </div>
+  </header>
+
+  <!-- ===================== left: inputs ===================== -->
+  <aside class="rail rail-left" aria-label="Inputs">
+    <nav class="tabs" role="tablist" data-tabs="left">
+      <button role="tab" data-tab="code" aria-selected="true">Code</button>
+      <button role="tab" data-tab="hardware" aria-selected="false">Hardware</button>
+      <button role="tab" data-tab="rig" aria-selected="false">Rig <span class="count" id="rigCount"></span></button>
+      <button role="tab" data-tab="config" aria-selected="false">Config</button>
+    </nav>
+
+    <section class="pane" data-pane="code">
+      <div class="sec">
+        <div class="sec-head"><h3>OpModes</h3><span class="spacer"></span>
+          <button class="btn-sm" id="addOpMode">+ Load .java</button></div>
+        <div class="oplist" id="opList"></div>
+        <input type="file" id="codeFile" accept=".java,.txt" multiple hidden>
+      </div>
+      <div class="sec sec-src">
+        <div class="sec-head"><h3>Source</h3><span class="mono dim" id="srcName"></span><span class="spacer"></span>
+          <button class="btn-sm primary" id="reparse">Re-analyze</button></div>
+        <textarea class="srcbox" id="srcbox" spellcheck="false" aria-label="OpMode source"></textarea>
+        <p class="hint">Edit and re-analyze, or drop <code>.java</code>, <code>.step</code> or a configuration <code>.xml</code> anywhere on the page.</p>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>What the bench runs</h3><span class="spacer"></span><span class="pill" id="covPill">—</span></div>
+        <div id="coverage"></div>
+      </div>
+    </section>
+
+    <section class="pane" data-pane="hardware" hidden>
+      <div class="sec">
+        <div class="sec-head"><h3>Robot CAD</h3></div>
         <div class="drop ok" id="cadDrop" tabindex="0" role="button" aria-label="Load a STEP CAD file">
-          <div class="dt">CAD &mdash; STEP / STP</div>
+          <div class="dt">STEP / STP assembly</div>
           <div class="ds" id="cadStatus">sample: fulll.step (measured)</div>
         </div>
         <input type="file" id="cadFile" accept=".step,.stp,.STEP,.STP" hidden>
-        <div class="drop ok" id="codeDrop" tabindex="0" role="button" aria-label="Load a Java OpMode file">
-          <div class="dt">OpMode &mdash; .java</div>
-          <div class="ds" id="codeStatus">WORKSHOPCODE.java</div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Robot configuration</h3><span class="spacer"></span>
+          <button class="btn-sm" id="cfgClear" hidden>Remove</button></div>
+        <div class="drop" id="cfgDrop" tabindex="0" role="button" aria-label="Load a robot configuration XML file">
+          <div class="dt">Configuration .xml</div>
+          <div class="ds" id="cfgStatus">From the FIRST folder on the Control Hub. Every hardwareMap name gets checked.</div>
         </div>
-        <input type="file" id="codeFile" accept=".java,.txt" hidden>
-        <textarea class="srcbox" id="srcbox" spellcheck="false" aria-label="OpMode source"></textarea>
-        <div class="btnrow">
-          <button class="primary" id="reparse">Re-analyze</button>
-          <button id="resetSample">Sample arm</button>
-          <button id="loadDrive">Sample drivetrain</button>
+        <input type="file" id="cfgFile" accept=".xml" hidden>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Hardware truth</h3><span class="spacer"></span>
+          <div class="seg" id="trustSeg"><button data-trust="code" class="on">code</button><button data-trust="cad">CAD</button></div></div>
+        <p class="hint" id="trustNote">Servo and motor types come from your declarations and comments. The CAD is used for geometry only.</p>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Hardware map</h3><span class="spacer"></span><span class="pill" id="mapPill">—</span></div>
+        <div class="scrollx"><table class="grid" id="mapTable"></table></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Assembly</h3><span class="spacer"></span><span class="pill" id="partPill">—</span></div>
+        <div class="scroll-list"><table class="grid" id="treeTable"></table></div>
+      </div>
+    </section>
+
+    <section class="pane" data-pane="rig" hidden>
+      <div class="sec">
+        <div class="sec-head"><h3>Kinematic rig</h3><span class="spacer"></span>
+          <span class="pill" id="guessPill">—</span>
+          <button class="btn-sm" id="addJoint">+ Joint</button></div>
+        <p class="hint">The rig is the model everything runs on, and it's yours — detection only seeds it. Edits save with this CAD.</p>
+        <div class="scrollx"><table class="grid" id="rigTable"></table></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>What moves with what</h3><span class="spacer"></span><span class="pill" id="rigPill">—</span></div>
+        <div id="rigChain"></div>
+        <div class="slide"><label for="turretSlider">Turret radius</label>
+          <input type="range" id="turretSlider" min="15" max="250" step="5" value="55">
+          <span class="v" id="turretVal">55 %</span></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Portable rig</h3><span class="spacer"></span>
+          <button class="btn-sm" id="rigCopy">Copy</button>
+          <button class="btn-sm" id="rigApply">Apply</button>
+          <button class="btn-sm" id="rigReset">Re-detect</button></div>
+        <textarea id="rigJson" class="srcbox small" spellcheck="false" aria-label="Rig JSON"></textarea>
+        <p class="hint">Commit this next to your OpMode — next season starts from last season's rig.</p>
+      </div>
+    </section>
+
+    <section class="pane" data-pane="config" hidden>
+      <div class="sec">
+        <div class="sec-head"><h3>Config variables</h3><span class="spacer"></span><span class="pill" id="cfgVarPill">—</span></div>
+        <p class="hint" id="cfgVarNote"></p>
+        <div id="cfgVars"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Assumptions</h3></div>
+        <div class="slide"><label for="massSlider">Payload at end effector</label>
+          <input type="range" id="massSlider" min="0" max="500" step="10" value="180">
+          <span class="v" id="massVal">180 g</span></div>
+        <div class="slide"><label for="dutySlider">Usable share of stall torque</label>
+          <input type="range" id="dutySlider" min="10" max="60" step="1" value="30">
+          <span class="v" id="dutyVal">30 %</span></div>
+        <p class="hint">These only feed the torque check. Stall torque is a ceiling, not a working load — 25–35 % is a sensible share for a servo that must hold position.</p>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ===================== centre: the field ===================== -->
+  <main class="stage">
+    <div class="viewport" id="viewport">
+      <div class="vp-top">
+        <div class="vp-title" id="vpTitle">—</div>
+        <div class="seg seg-dark" id="viewSeg">
+          <button data-v="iso" class="on">robot</button><button data-v="front">front</button><button data-v="side">side</button><button data-v="top">top</button><button data-v="field">field</button>
+        </div>
+        <div class="vp-legend" id="vpLegend"></div>
+      </div>
+      <div class="vp-hint" id="vpHint" hidden></div>
+      <div class="vp-bottom">
+        <div class="pip" id="pip" hidden>
+          <div class="pip-head"><span>Torque angle</span><span id="pipDeg">—</span></div>
+          <div id="mech"></div>
+        </div>
+        <div class="vp-readout">
+          <span id="vpPose">x 0.00 m · y 0.00 m · 0°</span>
+          <span id="vpDims">—</span>
+          <button class="btn-ghost" id="resetPose" title="Put the robot back on its start mark">Reset pose</button>
         </div>
       </div>
-      <div class="trust">
-        <span class="lb">Hardware truth</span>
-        <div class="seg" id="trustSeg">
-          <button data-trust="code" class="on">code</button><button data-trust="cad">CAD</button>
-        </div>
-        <span class="meta" id="trustNote" style="flex:1 1 100%">Servo/motor type comes from your declarations and comments. The CAD is used for geometry only.</span>
-      </div>
-    </section>
+    </div>
 
-    <section class="panel">
-      <div class="phead"><h2>Hardware map</h2><span class="spacer"></span><span class="pill" id="mapPill">&mdash;</span></div>
-      <div style="padding:4px 6px 8px; overflow-x:auto"><table class="grid" id="mapTable"></table></div>
-      <p class="meta" style="padding:0 13px 12px">Every device your code asks <code>hardwareMap</code> for, matched to a mechanism in the CAD. Override the mechanism or type the real lever length if you've changed the build.</p>
-    </section>
+    <div class="dock">
+      <section class="cell cell-pad" aria-label="Gamepad">
+        <div class="cell-head"><h3>Gamepad</h3><span class="spacer"></span>
+          <div class="seg" id="padSeg"><button data-pad="1">gamepad1</button><button data-pad="2" class="on">gamepad2</button></div></div>
+        <div class="padwrap" id="padwrap"></div>
+        <p class="keys">Keys <kbd>A</kbd><kbd>B</kbd><kbd>X</kbd><kbd>Y</kbd> · <kbd>Q</kbd><kbd>E</kbd> bumpers · arrows d-pad · <kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd> left stick · <kbd>U</kbd><kbd>O</kbd> turn</p>
+        <div class="bindlist" id="bindlist"></div>
+      </section>
+      <section class="cell cell-tele" aria-label="Driver Station telemetry">
+        <div class="cell-head"><h3>Telemetry</h3><span class="spacer"></span><span class="pill" id="loopPill">—</span></div>
+        <div class="ds-panel" id="dsPanel"></div>
+      </section>
+      <section class="cell cell-acts" aria-label="Actuators">
+        <div class="cell-head"><h3>Actuators</h3><span class="spacer"></span><span class="pill" id="tickPill">—</span></div>
+        <div class="gauges" id="gauges"></div>
+      </section>
+    </div>
+  </main>
 
-    <section class="panel">
-      <div class="phead"><h2>Assembly</h2><span class="spacer"></span><span class="pill" id="partPill">&mdash;</span></div>
-      <div style="padding:4px 6px 10px; max-height:210px; overflow:auto"><table class="grid" id="treeTable"></table></div>
-    </section>
-  </div>
+  <!-- ===================== right: outputs ===================== -->
+  <aside class="rail rail-right" aria-label="Results">
+    <nav class="tabs" role="tablist" data-tabs="right">
+      <button role="tab" data-tab="checks" aria-selected="true">Checks <span class="count" id="checkCount"></span></button>
+      <button role="tab" data-tab="graph" aria-selected="false">Graph</button>
+      <button role="tab" data-tab="compare" aria-selected="false">Compare</button>
+    </nav>
 
-  <div class="stack">
-    <section class="panel">
-      <div class="phead"><h2>Robot</h2><span class="spacer"></span>
-        <span class="pill" id="geoPill">&mdash;</span>
-        <div class="seg" id="viewSeg"><button data-v="iso" class="on">iso</button><button data-v="front">front</button><button data-v="side">side</button><button data-v="top">top</button></div>
-      </div>
-      <div style="padding:13px">
-        <div class="viewport" id="viewport">
-          <div class="vp-tag tl" id="vpTitle">&mdash;</div>
-          <div class="vp-legend" id="vpLegend"></div>
-          <div class="vp-tag bl">drag to orbit · scroll to zoom</div>
-          <div class="vp-tag br" id="vpDims">&mdash;</div>
-        </div>
-      </div>
-      <div class="slidebox"><label for="massSlider">Payload at end effector</label>
-        <input type="range" id="massSlider" min="0" max="500" step="10" value="180">
-        <span class="v" id="massVal">180 g</span></div>
-      <div class="slidebox"><label for="dutySlider">Usable / stall torque</label>
-        <input type="range" id="dutySlider" min="10" max="60" step="1" value="30">
-        <span class="v" id="dutyVal">30 %</span></div>
-    </section>
-
-    <section class="panel">
-      <div class="phead"><h2>Rig</h2><span class="spacer"></span>
-        <span class="pill" id="guessPill">&mdash;</span>
-        <span class="pill" id="rigPill">&mdash;</span>
-        <button id="addJoint" style="padding:3px 9px;font-size:11px">+ Add joint</button>
-      </div>
-      <div style="padding:4px 6px 6px; overflow-x:auto"><table class="grid" id="rigTable"></table></div>
-      <div id="rigChain"></div>
-      <div class="slidebox"><label for="turretSlider">Turret radius</label>
-        <input type="range" id="turretSlider" min="15" max="250" step="5" value="55">
-        <span class="v" id="turretVal">55 %</span></div>
-      <p class="meta" style="padding:6px 13px 10px">The rig is the model everything else runs on, and it is <b>yours</b> &mdash; detection only seeds it. Anything the CAD didn't group can be added by hand and placed on any part in the assembly. Edits save automatically and reload with this CAD.</p>
-      <div class="rigio">
-        <div class="rigio-head">
-          <span>Portable rig &mdash; paste into your repo next to the OpMode</span>
-          <span class="spacer" style="margin-left:auto"></span>
-          <button id="rigCopy" style="padding:3px 9px;font-size:11px">Copy</button>
-          <button id="rigApply" style="padding:3px 9px;font-size:11px">Apply</button>
-          <button id="rigReset" style="padding:3px 9px;font-size:11px">Re-detect</button>
-        </div>
-        <textarea id="rigJson" class="srcbox" style="height:104px" spellcheck="false" aria-label="Rig JSON"></textarea>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="phead"><h2>Actuators</h2><span class="spacer"></span><span class="pill" id="tickPill">idle</span></div>
-      <div class="gauges" id="gauges"></div>
-    </section>
-  </div>
-
-  <div class="stack diag-col">
-    <section class="panel">
-      <div class="phead"><h2>Diagnostics</h2><span class="spacer"></span><span class="pill" id="verdictPill">&mdash;</span></div>
+    <section class="pane" data-pane="checks">
       <div class="score" id="score"></div>
       <div id="findings"></div>
       <div id="ignoredWrap"></div>
     </section>
-  </div>
-</div>
 
-<div class="zone-label"><span class="n">2</span><h2>Drive</h2><span class="hint">press a button &mdash; see exactly what it commands</span></div>
-
-<div class="drive">
-  <section class="panel">
-    <div class="phead"><h2>Gamepad</h2><span class="spacer"></span>
-      <span class="pill" id="hwPad">no USB pad</span>
-      <div class="seg" id="padSeg"><button data-pad="1">gamepad1</button><button data-pad="2" class="on">gamepad2</button></div>
-    </div>
-    <div class="padwrap" id="padwrap"></div>
-    <p class="meta" style="padding:0 13px 10px; text-align:center">Drag the sticks. Keyboard: <code>A B X Y</code>, <code>Q</code>/<code>E</code> bumpers, arrows for the d-pad, <code>I J K L</code> for the left stick, <code>U</code>/<code>O</code> to turn.</p>
-    <div class="bindlist" id="bindlist"></div>
-  </section>
-
-  <div class="stack">
-    <section class="panel">
-      <div class="phead"><h2>Torque angle</h2><span class="spacer"></span><span class="pill" id="mechPill">side elevation</span></div>
-      <div class="mech" id="mech"></div>
+    <section class="pane" data-pane="graph" hidden>
+      <div class="graph-bar">
+        <div class="seg" id="winSeg"><button data-w="10">10 s</button><button data-w="30" class="on">30 s</button><button data-w="60">60 s</button></div>
+        <span class="spacer"></span>
+        <button class="btn-sm" id="graphPause">Pause</button>
+        <button class="btn-sm" id="graphClear">Clear</button>
+      </div>
+      <div class="charts" id="charts"></div>
+      <div class="legend" id="legend"></div>
     </section>
-    <section class="panel">
-      <div class="phead"><h2>Driver Station telemetry</h2><span class="spacer"></span><span class="pill live">live</span></div>
-      <div class="ds-panel" id="dsPanel"></div>
-    </section>
-  </div>
-</div>
 
-<footer class="foot">
-  <b>What it actually does</b>
-  The bench does not compile or run your OpMode. It parses the loop into a statement tree &mdash; assignments, <code>if</code>/<code>else</code>, and device calls with real arithmetic on gamepad axes &mdash; and interprets that tree at 50&nbsp;Hz against a hardware model. Because it interprets rather than pattern-matches, rising-edge latches, stick mixing and drivetrain maths all behave the way they will on the robot.
-  <b>Where the numbers come from</b>
-  Lever arms, joint axes and the kinematic chain are measured from your STEP assembly. Torque and speed figures are published manufacturer ballparks; the payload and duty sliders let you re-run the sums with your own assumptions, and any lever you've physically changed can be typed straight into the hardware map. Treat the verdicts as a pointer to the joint worth measuring, not a replacement for measuring it.
-  <b>What it can't check</b>
-  Robot Controller configuration names. Nothing in a CAD file can confirm those &mdash; they still have to match your Driver Station config by hand, including case.
-</footer>
+    <section class="pane" data-pane="compare" hidden>
+      <div class="cmp-pick">
+        <label>A <select id="cmpA" aria-label="First OpMode"></select></label>
+        <label>B <select id="cmpB" aria-label="Second OpMode"></select></label>
+      </div>
+      <div id="compare"></div>
+    </section>
+  </aside>
 </div>
