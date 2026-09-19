@@ -236,6 +236,80 @@ public class TimedDriveAuto extends LinearOpMode {
     }
 }`;
 
+const SHOOTER_JAVA = `package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.Servo;
+
+@TeleOp(name = "BIOBUZZ Shooter")
+public class ShooterTeleOp extends LinearOpMode {
+
+    DcMotor leftFront;
+    DcMotor rightFront;
+    DcMotor leftBack;
+    DcMotor rightBack;
+
+    // 6000 rpm goBILDA, 1:1 to the flywheel
+    DcMotorEx flywheel;
+    Servo kicker;
+
+    static double NEAR_VELOCITY = 1080;
+    static double FAR_VELOCITY = 1280;
+    static final double KICK_REST = 0.20;
+    static final double KICK_FIRE = 0.55;
+
+    double target = 0;
+
+    @Override
+    public void runOpMode() {
+        leftFront = hardwareMap.get(DcMotor.class, "leftFront");
+        rightFront = hardwareMap.get(DcMotor.class, "rightFront");
+        leftBack = hardwareMap.get(DcMotor.class, "leftBack");
+        rightBack = hardwareMap.get(DcMotor.class, "rightBack");
+        flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
+        kicker = hardwareMap.get(Servo.class, "kicker");
+
+        kicker.setPosition(KICK_REST);
+
+        waitForStart();
+
+        while (opModeIsActive()) {
+            double y = -gamepad1.left_stick_y;
+            double x = gamepad1.left_stick_x;
+            double turn = gamepad1.right_stick_x;
+
+            leftFront.setPower(y + x + turn);
+            leftBack.setPower(y - x + turn);
+            rightFront.setPower(y - x - turn);
+            rightBack.setPower(y + x - turn);
+
+            if (gamepad2.dpad_up) {
+                target = FAR_VELOCITY;
+            }
+            if (gamepad2.dpad_down) {
+                target = NEAR_VELOCITY;
+            }
+            if (gamepad2.b) {
+                target = 0;
+            }
+            flywheel.setVelocity(target);
+
+            if (gamepad2.right_bumper) {
+                kicker.setPosition(KICK_FIRE);
+            } else {
+                kicker.setPosition(KICK_REST);
+            }
+
+            telemetry.addData("Flywheel target", target);
+            telemetry.addData("Flywheel velocity", flywheel.getVelocity());
+            telemetry.update();
+        }
+    }
+}`;
+
 /* Measured out of the user's fulll.step (AP242, metre units). */
 const SAMPLE_CAD = {
   name:"fulll.step", units:"METRE", pointCount:127206,

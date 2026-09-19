@@ -5,8 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ENGINE = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'robotconfig', 'compare', 'analyze', 'sim'];
+const ENGINE = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'robotconfig', 'compare', 'analyze', 'field', 'shots', 'sim'];
 const EXPORTS = [
+  'Field', 'Shots', 'IN', 'TIP_GRAMS', 'FRONTS', 'footprintOf', 'capsulePush', 'nearestMotorId', 'SHOOTER_JAVA',
   'HW_PARTS', 'GENERIC', 'hwFromPart', 'specFor',
   'SAMPLE_JAVA', 'DRIVE_JAVA', 'SAMPLE_CAD', 'synthGeometry',
   'splitStepRecords', 'parseSTEP', 'classifyMechs', 'recomputeChain', 'rigCarries', 'rigRoots', 'mlabel',
@@ -24,6 +25,23 @@ export function loadEngine() {
 }
 
 export const fixture = (name) => fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', name), 'utf8');
+
+/** The vendored BIOBUZZ Shot Sim engine and its data, as the page loads them. */
+export function loadShotEngine() {
+  const dir = path.join(ROOT, 'vendor', 'biobuzz-shot-sim');
+  const mod = { exports: {} };
+  new Function('module', 'exports', fs.readFileSync(path.join(dir, 'engine.js'), 'utf8'))(mod, mod.exports);
+  const json = (f) => JSON.parse(fs.readFileSync(path.join(dir, 'data', f), 'utf8'));
+  return { engine: mod.exports, data: { field: json('field.json'), motors: json('motors.json'), shooter: json('shooter.json') } };
+}
+
+/** Engine with the BIOBUZZ field switched on. */
+export function loadWithField() {
+  const E = loadEngine();
+  const { engine, data } = loadShotEngine();
+  E.Field.init(engine, data);
+  return E;
+}
 
 /** Fresh sample rig + parsed sample code, the way the app boots. */
 export function sampleBench(E, java = E.SAMPLE_JAVA, trust = 'code') {

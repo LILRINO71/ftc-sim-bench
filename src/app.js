@@ -11,7 +11,7 @@ const store={
 };
 
 let CODE=null, CAD=null, MAP={}, FINDINGS=[], activePad=2;
-const OPTS={payloadKg:0.180, duty:0.30, trust:"code", robotConfig:null};
+const OPTS={payloadKg:0.180, duty:0.30, trust:"code", robotConfig:null, front:"+x"};
 let IGNORED={};
 try{ IGNORED=JSON.parse(store.get("ftcbench.ignored","{}"))||{}; }catch(e){ IGNORED={}; }
 function saveIgnored(){ store.set("ftcbench.ignored",JSON.stringify(IGNORED)); }
@@ -43,6 +43,7 @@ function selectTab(nav,tab){
   store.set("ftcbench.tab."+nav.dataset.tabs,tab);
   if(tab==="graph") Graph.draw();
   if(tab==="compare") renderCompare();
+  if(tab==="shot"){ ShotUI.dirty=true; ShotUI.t=0; renderShotSetup(); }
 }
 const paneVisible=name=>{ const p=document.querySelector(`.pane[data-pane="${name}"]`); return p&&!p.hidden; };
 
@@ -59,7 +60,8 @@ function initLibrary(){
   LIBRARY=[
     {id:"sample-claw", file:"WORKSHOPCODE.java", source:SAMPLE_JAVA, builtin:true},
     {id:"sample-mecanum", file:"MecanumTeleOp.java", source:DRIVE_JAVA, builtin:true},
-    {id:"sample-auto", file:"TimedDriveAuto.java", source:AUTO_JAVA, builtin:true}
+    {id:"sample-auto", file:"TimedDriveAuto.java", source:AUTO_JAVA, builtin:true},
+    {id:"sample-shooter", file:"ShooterTeleOp.java", source:SHOOTER_JAVA, builtin:true}
   ];
   try{
     const saved=JSON.parse(store.get("ftcbench.library","[]"))||[];
@@ -119,6 +121,7 @@ function selectOpMode(id){
   analyzeAll();
   Sim.load(CODE,CAD,MAP,withPose());
   applyConfigOverrides(); Sim.init(); applyConfigOverrides();    // like a DS: selected and INIT'd, waiting for START
+  Shots.adopt(CODE); ShotUI.dirty=true; renderShotSetup();
   buildGauges(); renderPad(); Graph.reset(); renderConfigVars(); renderLegend3D();
   renderOpList(); renderOpSelect(); renderCompareSelects(); updateDS();
 }
@@ -138,6 +141,7 @@ function withPose(){ OPTS.startPose=Object.assign({x:0,y:0,h:0},Sim.chassis||{})
 function applyConfigOverrides(){ for(const k in CONFIG_OVR) Sim.vars[k]=CONFIG_OVR[k]; }
 function dsInit(){
   if(!CODE||Sim.phase==="running") return;
+  Field.reset(); Shots.reset(); ShotUI.dirty=true;       // a fresh match: HIVEs as staged
   Sim.load(CODE,CAD,MAP,withPose());
   applyConfigOverrides(); Sim.init(); applyConfigOverrides();
   buildGauges(); Graph.reset(); updateDS();
@@ -408,7 +412,7 @@ function renderDS(){
   }
   out+=`<div class="dshr">────────────────────</div>`;
   if(Sim.drivetrain&&Sim.drivetrain.ok)
-    out+=`<div><span class="dsk">pose</span> <span class="dsv">${Sim.chassis.x.toFixed(2)}, ${Sim.chassis.y.toFixed(2)} m · ${Math.round(Sim.chassis.h*180/Math.PI)}°</span></div>`;
+    out+=`<div><span class="dsk">pose</span> <span class="dsv">${poseText(Sim.chassis)}</span></div>`;
   if(Sim.sleptMs&&CODE.hasLoop) out+=`<div><span class="dsk">bench</span> <span class="dsbad">sleep() blocked the loop for ${Math.round(Sim.sleptMs)} ms so far</span></div>`;
   const st=Object.keys(Sim.dev).filter(k=>Sim.dev[k].stalled);
   out+=st.length?`<div><span class="dsk">bench</span> <span class="dsbad">stalled: ${esc(st.join(", "))}</span></div>`
@@ -478,6 +482,7 @@ function exportRig(){
     format:"ftc-sim-bench.rig", version:1,
     cad:(CAD&&CAD.name)||null, opmode:(CODE&&CODE.opmode)||null,
     trust:OPTS.trust, payloadKg:OPTS.payloadKg, duty:OPTS.duty, turretScale:View.turretScale,
+    front:OPTS.front, shot:Shots.cfg||null,
     joints:(CAD?CAD.mechs:[]).map(m=>({
       id:m.id, label:m.label||m.id, kind:m.kind, parent:m.parent, dir:m.dir||1,
       pivotMm:m.pivot?m.pivot.map(v=>+(v*1000).toFixed(1)):null,
@@ -493,6 +498,8 @@ function applyRig(r){
   if(typeof r.payloadKg==="number") OPTS.payloadKg=r.payloadKg;
   if(typeof r.duty==="number") OPTS.duty=r.duty;
   if(typeof r.turretScale==="number") View.turretScale=r.turretScale;
+  if(r.front&&FRONTS[r.front]!==undefined) OPTS.front=r.front;
+  if(r.shot&&typeof r.shot==="object") Shots.cfg=Object.assign(Shots.defaults(),r.shot);
   const byId={}; CAD.mechs.forEach(m=>byId[m.id]=m);
   for(const j of (r.joints||[])){
     let m=byId[j.id];
@@ -922,6 +929,178 @@ function renderCompare(){
 }
 
 /* ============================================================
+   SHOT — the BIOBUZZ Shot Sim, live from where the robot is
+   ============================================================ */
+const VERDICT_CLASS={"POSSIBLE":"pass","NOT CONSISTENT":"warn","WON'T WORK":"fail"};
+const VERDICT_HEX={"POSSIBLE":0x3FB68B,"NOT CONSISTENT":0xE0A42E,"WON'T WORK":0xE4574E};
+const ShotUI={key:null, still:0, t:0, dirty:true, full:false, res:null, win:null, preview:null, arc:true, arcKey:null};
+const wrap180=d=>((d%360)+540)%360-180;
+const poseText=c=>Field.ok
+  ? `x ${(c.x/IN).toFixed(1)} · y ${(c.y/IN).toFixed(1)} in · ${Math.round(wrap180(c.h*180/Math.PI))}°`
+  : `x ${c.x.toFixed(2)} m · y ${c.y.toFixed(2)} m · ${Math.round(c.h*180/Math.PI)}°`;
+function setHTML(el,html){ if(el&&el.innerHTML!==html) el.innerHTML=html; }
+function placeAtStart(){
+  const p=Field.ok?Field.startPose(Shots.alliance,footprintOf(CAD,OPTS.front)):{x:0,y:0,h:0};
+  Sim.chassis={x:p.x,y:p.y,h:p.h}; OPTS.startPose=Object.assign({},p);
+}
+function setAlliance(al,move){
+  Shots.alliance=al==="blue"?"blue":"red"; View.alliance=Shots.alliance; store.set("ftcbench.alliance",Shots.alliance);
+  if(View.mode==="field") View.setView("field");
+  if(move&&CAD&&Sim.phase!=="running") placeAtStart();
+  ShotUI.dirty=true; ShotUI.t=0; renderShotSetup();
+}
+/* Ticks per second at full speed for the flywheel as the code declares it,
+   so the advice comes out in the units setVelocity() takes. */
+function flywheelTicks(){
+  const s=Shots.cfg&&Shots.cfg.shooter&&Sim.dev[Shots.cfg.shooter];
+  return s?(s.spec.rpm||300)/60*s.tpr:2800;
+}
+function shotEvaluate(mode){
+  try{
+    const c=Sim.chassis;
+    ShotUI.res=Field.E.evaluate(Shots.params(c),mode);
+    ShotUI.win=paneVisible("shot")?Shots.window(c,ShotUI.res.best?ShotUI.res.best.yawDeg:ShotUI.res.psi0Deg):null;
+  }catch(e){ ShotUI.res=null; ShotUI.win=null; }
+}
+function shotTick(now){
+  if(!Field.ok||!Shots.cfg||!CAD) return;
+  const c=Sim.chassis;
+  const key=[(c.x/IN).toFixed(1),(c.y/IN).toFixed(1),Field.hive.red,Field.hive.blue,Shots.alliance,JSON.stringify(Shots.cfg)].join("|");
+  if(key!==ShotUI.key){ ShotUI.key=key; ShotUI.still=now; ShotUI.dirty=true; ShotUI.full=false; }
+  let fresh=false;
+  if(ShotUI.dirty&&now-ShotUI.t>=250){ shotEvaluate("coarse"); ShotUI.t=now; ShotUI.dirty=false; fresh=true; }
+  else if(!ShotUI.dirty&&!ShotUI.full&&now-ShotUI.still>=700){ shotEvaluate("full"); ShotUI.full=true; fresh=true; }
+  // what would happen if the robot fired right now
+  ShotUI.preview=null;
+  if(Shots.cfg.shooter&&Shots.spin()>0.1){
+    const v=Shots.exitSpeed();
+    if(v>=1) ShotUI.preview=Field.E.classifyShot(Shots.params(c),Shots.cfg.hoodDeg,v,Shots.yawDeg(c));
+  }
+  updateArc();
+  const sc=$("#shotCount"), r=ShotUI.res;
+  if(sc){ const k=r?VERDICT_CLASS[r.verdict]:""; sc.textContent=r?(k==="pass"?"✓":k==="warn"?"~":"✕"):""; sc.className="count"+(k==="fail"?" fail":k==="warn"?" warn":""); }
+  if(paneVisible("shot")){ if(fresh) renderShotVerdict(); renderShotLive(); renderHives(); renderShotLog(); }
+}
+function updateArc(){
+  let path=null, col=0, dashed=false;
+  if(ShotUI.arc){
+    if(ShotUI.preview){ path=ShotUI.preview.path; col=ShotUI.preview.hit?0x3FB68B:0xE4574E; }
+    // the best arc only when it's worth showing: a WON'T WORK "best" can be a 6 m lob
+    else if(ShotUI.res&&ShotUI.res.trajectory&&ShotUI.res.verdict!=="WON'T WORK"){
+      path=ShotUI.res.trajectory; col=VERDICT_HEX[ShotUI.res.verdict]||0x8595A8; dashed=true; }
+  }
+  const k=path?[path.length,path[0].join(","),path[path.length-1].join(","),col,dashed].join("|"):"";
+  if(k===ShotUI.arcKey) return;
+  ShotUI.arcKey=k; View.setArc(path,col,dashed);
+}
+function renderShotVerdict(){
+  const el=$("#shotVerdict"); if(!el) return;
+  if(!Field.ok){ el.className="verdict"; el.innerHTML=`<div class="vs">The BIOBUZZ field didn't load, so there is nothing to shoot at. Everything else on the bench works.</div>`; return; }
+  const r=ShotUI.res, c=Sim.chassis, al=Shots.target().toUpperCase();
+  if(!r){ el.className="verdict"; el.innerHTML=`<div class="vs">Working out the shot from here…</div>`; return; }
+  const b=r.best;
+  el.className="verdict "+(VERDICT_CLASS[r.verdict]||"");
+  el.innerHTML=`<div class="vhead"><span class="vw">${esc(r.verdict)}</span><span class="vr">${Math.round((r.hitRate||0)*100)}% score</span></div>
+    <div class="vs">From x ${(c.x/IN).toFixed(0)}, y ${(c.y/IN).toFixed(0)} in to the ${al} up-CELL, ${Math.round(r.distIn)} in away. ${esc(r.reason||"")}</div>
+    ${b?`<div class="vk"><div><b>${b.thetaDeg.toFixed(0)}°</b><span>launch</span></div><div><b>${b.v.toFixed(2)}</b><span>m/s exit</span></div><div><b>${r.motor?Math.round(r.motor.motorRpm).toLocaleString():"—"}</b><span>motor rpm</span></div></div>`:""}
+    ${(r.warnings||[]).map(w=>`<div class="vwarn">${esc(w.text)}</div>`).join("")}`;
+}
+function renderShotLive(){
+  const el=$("#shotLive"); if(!el||!Shots.cfg) return;
+  const cfg=Shots.cfg, full=Shots.full(), spin=Shots.spin(), c=Sim.chassis, out=[];
+  if(!cfg.shooter) out.push(`<div>No flywheel motor picked. Choose one below, or press Fire to see the best shot from here.</div>`);
+  else out.push(`<div><code>${esc(cfg.shooter)}</code> ${spin>0.01
+    ?`at <b>${Math.round(spin*100)}%</b> of free speed → ${Math.round(Math.min(full.rpm,spin*full.free)).toLocaleString()} rpm → <b>${Shots.exitSpeed().toFixed(2)} m/s</b>`
+    :"is stopped"+(Sim.phase==="running"?"":" — press START")}</div>`);
+  const w=ShotUI.win, T=flywheelTicks();
+  if(w&&full.v){
+    const sp=v=>v/full.v*full.rpm/full.free;           // exit speed → share of free speed
+    const band=(a,b)=>a===b?a:a+"–"+b;
+    out.push(`<div>At ${cfg.hoodDeg}° this spot scores from <b>${w.lo.toFixed(2)} to ${w.hi.toFixed(2)} m/s</b>: <code>setVelocity(${band(Math.round(sp(w.lo)*T),Math.round(sp(w.hi)*T))})</code> or power ${band(sp(w.lo).toFixed(2),sp(w.hi).toFixed(2))}.</div>`);
+  }else if(ShotUI.res&&paneVisible("shot")){
+    out.push(`<div>No flywheel speed scores from here at ${cfg.hoodDeg}°${ShotUI.res.best?` — the best arc from this spot leaves at ${ShotUI.res.best.thetaDeg.toFixed(0)}°`:""}.</div>`);
+  }
+  if(ShotUI.res&&ShotUI.res.best){
+    const d=wrap180(ShotUI.res.best.yawDeg-Shots.yawDeg(c));
+    out.push(Math.abs(d)<1.5?`<div>Aimed at the up-CELL.</div>`:`<div>Aim: turn <b>${Math.abs(d).toFixed(0)}° ${d>0?"left":"right"}</b>.</div>`);
+  }
+  if(ShotUI.preview) out.push(`<div>Fire now and it ${ShotUI.preview.hit?`<b class="ok">goes in</b>`:`<b class="bad">${esc(CAUSE_TEXT[ShotUI.preview.cause]||"misses")}</b>`}.</div>`);
+  setHTML(el,out.join(""));
+}
+function renderHives(){
+  const el=$("#hiveRows"); if(!el||!Field.ok) return;
+  const rows=["red","blue"].map(al=>{
+    const list=Field.cells[al], g=Field.grams(al);
+    const n={pollen:0,nectar:0}; list.forEach(e=>n[e.kind]++);
+    const what=list.length?[n.nectar?n.nectar+" NECTAR":"",n.pollen?n.pollen+" POLLEN":""].filter(Boolean).join(" + "):"empty";
+    const side=Field.hive[al]<0?"audience side":"far side";
+    return `<div class="hive-row"><div class="hive-top"><span class="al ${al}">${al.toUpperCase()}</span>
+      <span class="what">up-CELL on the ${side} · ${what}</span>
+      <button class="btn-sm" data-tip="${al}" title="Swing the ${al} HIVE over by hand">TIP</button></div>
+      <div class="tipbar"><i style="width:${Math.min(100,g/TIP_GRAMS*100).toFixed(0)}%"></i></div>
+      <div class="hive-sub"><span>${Math.round(g)} g of ~${TIP_GRAMS} g to TIP</span><span>${Field.tips[al]} TIP${Field.tips[al]===1?"":"s"} · ${Field.tips[al]*20} pts</span></div></div>`;
+  }).join("");
+  setHTML(el,rows);
+}
+function renderShotLog(){
+  const el=$("#shotLog"); if(!el) return;
+  const head=Shots.fired?`<div><span>this run</span>${Shots.fired} fired · ${Shots.scored} in</div>`:"";
+  setHTML(el,head+Shots.log.map(l=>`<div><span>${l.t.toFixed(1)} s</span>${esc(l.text)}</div>`).join(""));
+}
+function renderShotSetup(){
+  if(!$("#shotDev")) return;
+  $$("#allySeg button").forEach(b=>b.classList.toggle("on",b.dataset.al===Shots.alliance));
+  const cfg=Shots.cfg;
+  const fire=$("#fireBtn"); if(fire) fire.disabled=!Field.ok||!cfg;
+  if(!cfg||!Field.ok){ renderShotVerdict(); return; }
+  const devs=(CODE&&CODE.devices)||[];
+  const opt=(list,sel,none)=>[`<option value="">${none}</option>`].concat(list.map(d=>
+    `<option value="${esc(d.name)}"${d.name===sel?" selected":""}>${esc(d.name)}</option>`)).join("");
+  setHTML($("#shotDev"),opt(devs.filter(d=>/DcMotor/i.test(d.type||"")),cfg.shooter,"— none —"));
+  setHTML($("#shotFeed"),opt(devs.filter(d=>d.name!==cfg.shooter&&/Servo|DcMotor/i.test(d.type||"")),cfg.feeder,"— by hand (F) —"));
+  $$("#ballSeg button").forEach(b=>b.classList.toggle("on",b.dataset.ball===cfg.ball));
+  $$("#typeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.type===cfg.type));
+  $$("#mountSeg button").forEach(b=>b.classList.toggle("on",+b.dataset.mount===(cfg.mountDeg||0)));
+  $("#hoodSlider").value=cfg.hoodDeg; $("#hoodVal").textContent=cfg.hoodDeg+"°";
+  $("#h0Slider").value=cfg.h0In; $("#h0Val").textContent=cfg.h0In+" in";
+  const motors=Field.data.motors.motors;
+  setHTML($("#motorSel"),motors.map(m=>`<option value="${esc(m.id)}"${m.id===cfg.motorId?" selected":""}>${esc(m.label)}</option>`).join(""));
+  const wheels=Field.data.shooter.wheels;
+  setHTML($("#wheelSel"),wheels.map(w=>`<option value="${w.diameterMm}|${esc(w.id)}"${w.diameterMm===cfg.wheelMm&&(!cfg.wheelId||cfg.wheelId===w.id)?" selected":""}>${esc(w.label)}</option>`).join(""));
+  if(document.activeElement!==$("#gearIn")) $("#gearIn").value=cfg.gear;
+  renderShotVerdict(); renderShotLive(); renderHives(); renderShotLog();
+}
+function shotChanged(){ ShotUI.dirty=true; ShotUI.t=0; saveRig(); renderShotSetup(); }
+function shotFire(){
+  if(!Field.ok||!Shots.cfg) return;
+  if(Shots.cfg.shooter&&Shots.spin()>0.1) Shots.fire(Sim.chassis,"fired by hand");
+  else Shots.fireBest(Sim.chassis);
+  renderShotLog();
+}
+function wireShotTab(){
+  $("#fireBtn").addEventListener("click",shotFire);
+  $("#fieldReset").addEventListener("click",()=>{ Field.reset(); Shots.reset(); ShotUI.dirty=true; ShotUI.t=0; renderShotSetup(); });
+  $("#hiveRows").addEventListener("click",e=>{ const b=e.target.closest("[data-tip]"); if(!b) return; Field.tip(b.dataset.tip); ShotUI.dirty=true; ShotUI.t=0; renderHives(); });
+  $("#arcToggle").addEventListener("change",e=>{ ShotUI.arc=e.target.checked; store.set("ftcbench.arc",e.target.checked?"1":"0"); ShotUI.arcKey=null; updateArc(); });
+  $("#allySeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) setAlliance(b.dataset.al,true); });
+  const seg=(id,apply)=>$(id).addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||!Shots.cfg) return; apply(b); shotChanged(); });
+  seg("#ballSeg",b=>Shots.cfg.ball=b.dataset.ball);
+  seg("#typeSeg",b=>Shots.cfg.type=b.dataset.type);
+  seg("#mountSeg",b=>Shots.cfg.mountDeg=+b.dataset.mount);
+  $("#hoodSlider").addEventListener("input",e=>{ if(!Shots.cfg) return; Shots.cfg.hoodDeg=+e.target.value; $("#hoodVal").textContent=e.target.value+"°"; ShotUI.dirty=true; saveRig(); });
+  $("#h0Slider").addEventListener("input",e=>{ if(!Shots.cfg) return; Shots.cfg.h0In=+e.target.value; $("#h0Val").textContent=e.target.value+" in"; ShotUI.dirty=true; saveRig(); });
+  $("#motorSel").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.motorId=e.target.value; shotChanged(); });
+  $("#wheelSel").addEventListener("change",e=>{ if(!Shots.cfg) return; const p=e.target.value.split("|"); Shots.cfg.wheelMm=+p[0]; Shots.cfg.wheelId=p[1]; shotChanged(); });
+  $("#gearIn").addEventListener("change",e=>{ if(!Shots.cfg) return; const v=parseFloat(e.target.value); if(isFinite(v)&&v>0) Shots.cfg.gear=Math.max(0.25,Math.min(4,v)); shotChanged(); });
+  $("#shotDev").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.shooter=e.target.value||null; Shots.cfg.motorId=nearestMotorId(Shots.deviceRpm()); shotChanged(); });
+  $("#shotFeed").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.feeder=e.target.value||null; shotChanged(); });
+  $("#frontSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    OPTS.front=b.dataset.front; Sim.footprint=footprintOf(CAD,OPTS.front);
+    Sim.obstacles=Field.ok?Field.obstacles(Sim.footprint.h):[];
+    syncOptionControls(); saveRig(); });
+}
+
+/* ============================================================
    ORCHESTRATION
    ============================================================ */
 function renderLegend3D(){
@@ -958,16 +1137,18 @@ function syncOptionControls(){
   $("#massSlider").value=g; $("#massVal").textContent=g+" g";
   $("#dutySlider").value=d; $("#dutyVal").textContent=d+" %";
   $("#turretSlider").value=t; $("#turretVal").textContent=t+" %";
+  $$("#frontSeg button").forEach(b=>b.classList.toggle("on",b.dataset.front===OPTS.front));
 }
 function loadCAD(cad,label,cls){
   CAD=cad;
   $("#cadStatus").textContent=label; $("#cadDrop").className="drop "+(cls||"ok");
-  $("#vpTitle").textContent=(cad.name||label)+" · "+(cad.points?cad.points.length.toLocaleString():"0")+" pts · "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s");
+  $("#vpTitle").textContent=(cad.name||label)+" · "+(cad.points?cad.points.length.toLocaleString():"0")+" pts · "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s")+(Field.ok?" · BIOBUZZ field":"");
   const b=cad.bbox, mm=v=>(v*1000).toFixed(0);
   $("#vpDims").textContent=`${mm(b.max[0]-b.min[0])} × ${mm(b.max[1]-b.min[1])} × ${mm(b.max[2]-b.min[2])} mm`;
-  RIG_DEVICES={}; HW_USER={};
+  RIG_DEVICES={}; HW_USER={}; Shots.cfg=null; OPTS.front="+x";
   const restored=loadSavedRig();
   View.load(cad);
+  if(Sim.phase!=="running") placeAtStart();
   if(CODE){ MAP=autoMap(CODE.devices,CAD.mechs); applyDeviceMemory(); rebuild(); }
   if(restored) $("#cadStatus").textContent=label+" · rig restored";
   syncOptionControls();
@@ -1051,6 +1232,7 @@ function knobTo(axis,v){
 }
 addEventListener("keydown",e=>{
   if(typing(e)||e.ctrlKey||e.metaKey||e.altKey) return;
+  if(e.code==="KeyF"&&!e.repeat){ e.preventDefault(); shotFire(); return; }
   const sk=STICKKEYS[e.code];
   if(sk){ e.preventDefault(); Sim.pad[activePad][sk[0]]=sk[1]; knobTo(sk[0],sk[1]); return; }
   const b=KEYMAP[e.code]; if(!b) return;
@@ -1108,7 +1290,9 @@ function frame(now){
     const m=renderMech();
     if(m){ $("#mech").innerHTML=m.svg; $("#pipDeg").textContent=m.deg+"° off level"; }
     const c=Sim.chassis||{x:0,y:0,h:0};
-    $("#vpPose").textContent=`x ${c.x.toFixed(2)} m · y ${c.y.toFixed(2)} m · ${Math.round(c.h*180/Math.PI)}°`;
+    const zone=Field.ok?Field.zoneAt(c.x/IN,c.y/IN):null;
+    $("#vpPose").textContent=poseText(c)+(Sim.bump?` · against the ${Sim.bump}`:zone&&/LOADING|HIVE/.test(zone)?` · ${zone}`:"");
+    shotTick(now);
     const anyDown=Object.keys(Sim.pad[activePad]).some(k=>Sim.pad[activePad][k]);
     const tp=$("#tickPill");
     tp.textContent=Sim.phase==="running"?(anyDown?"commanding":"holding"):Sim.phase==="init"?"init positions":"idle";
@@ -1125,6 +1309,12 @@ function frame(now){
 (function boot(){
   setTheme(store.get("ftcbench.theme","dark")==="light"?"light":"dark");
   $("#themeBtn").addEventListener("click",()=>setTheme(currentTheme()==="dark"?"light":"dark"));
+  // the BIOBUZZ field and shot physics, from the vendored Shot Sim
+  Field.init(window.ShotEngine,window.SHOT_DATA);
+  let al=store.get("ftcbench.alliance","red");
+  try{ const qa=new URLSearchParams(location.search).get("alliance"); if(qa==="red"||qa==="blue") al=qa; }catch(e){}
+  Shots.alliance=View.alliance=al==="blue"?"blue":"red";
+  ShotUI.arc=store.get("ftcbench.arc","1")!=="0"; $("#arcToggle").checked=ShotUI.arc;
   View.init($("#viewport"));
   View.setView("iso");
   initTabs();
@@ -1206,7 +1396,8 @@ function frame(now){
   // stage & dock
   $("#viewSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
     $$("#viewSeg button").forEach(x=>x.classList.toggle("on",x===b)); View.setView(b.dataset.v); });
-  $("#resetPose").addEventListener("click",()=>{ Sim.chassis={x:0,y:0,h:0}; OPTS.startPose={x:0,y:0,h:0}; });
+  $("#resetPose").addEventListener("click",placeAtStart);
+  wireShotTab();
   $("#padSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
     activePad=+b.dataset.pad; $$("#padSeg button").forEach(x=>x.classList.toggle("on",x===b)); renderPad(); });
 
@@ -1227,6 +1418,13 @@ function frame(now){
   try{
     const q=new URLSearchParams(location.search);
     if(q.get("opmode")&&entry(q.get("opmode"))) selectOpMode(q.get("opmode"));
+    // ?pose=-40,-30,29 — a spot on the field in inches and a heading in degrees
+    const ps=(q.get("pose")||"").split(",").filter(s=>s!=="").map(Number);
+    if(ps.length>=2&&ps.every(isFinite)){
+      Sim.chassis={x:ps[0]*IN, y:ps[1]*IN, h:(ps[2]||0)*Math.PI/180};
+      if(Field.ok&&Sim.footprint) Field.collide(Sim.chassis,Sim.footprint,Sim.obstacles);
+      OPTS.startPose=Object.assign({},Sim.chassis);
+    }
     const v=q.get("view");
     if(v&&/^(iso|front|side|top|field)$/.test(v)){ View.setView(v); $$("#viewSeg button").forEach(x=>x.classList.toggle("on",x.dataset.v===v)); }
     ["left","right"].forEach(side=>{ const t=q.get(side), nav=$(`.tabs[data-tabs="${side}"]`);

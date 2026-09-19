@@ -1,11 +1,12 @@
 {
   "name": "ftc-sim-bench",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "Drop in any FTC robot's STEP CAD and any OpMode: the bench resolves the assembly, interprets the code at 50 Hz, and lets you drive the result with a virtual gamepad.",
   "license": "MIT",
   "scripts": {
     "build": "node tools/build.mjs",
-    "test": "node --test tests/engine.test.mjs tests/features.test.mjs"
+    "test": "node --test tests/engine.test.mjs tests/features.test.mjs tests/field.test.mjs",
+    "sync-shot-sim": "node tools/sync-shot-sim.mjs"
   }
 }

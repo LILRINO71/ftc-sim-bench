@@ -21,6 +21,7 @@ const HW_PARTS = {
 /* goBILDA Yellow Jacket planetary gearmotors: the trailing group of the part
    number is the nominal reduction, which fixes both speed and stall torque. */
 const YELLOW_JACKET = {
+  1:{ratio:1,rpm:6000,nm:0.14},
   3:{ratio:3.7,rpm:1620,nm:0.46},   5:{ratio:5.2,rpm:1150,nm:0.65},
   13:{ratio:13.7,rpm:435,nm:1.68},  19:{ratio:19.2,rpm:312,nm:2.38},
   26:{ratio:26.9,rpm:223,nm:3.34},  27:{ratio:26.9,rpm:223,nm:3.34},
@@ -37,6 +38,15 @@ const GENERIC = {
   Motor: {fam:"unspecified motor",   kind:"motor",role:"Motor", stallNm:2.38,rpm:312,ratio:19.2,guess:true},
   CRServo:{fam:"continuous servo",   kind:"crservo",role:"CR",  stallNm:1.40,rpm:100,guess:true}
 };
+
+/* "// 6000 rpm goBILDA" above a motor: the person who built it said which one. */
+function motorFromComment(text){
+  const m=/(\d{2,4})\s*rpm/i.exec(text||""); if(!m) return null;
+  const rpm=+m[1];
+  for(const k in YELLOW_JACKET){ const yj=YELLOW_JACKET[k];
+    if(yj.rpm===rpm) return {src:"code", fam:"goBILDA Yellow Jacket "+yj.ratio+":1", kind:"motor", role:"Motor", stallNm:yj.nm, rpm:yj.rpm, ratio:yj.ratio}; }
+  return Object.assign({}, GENERIC.Motor, {src:"code", fam:rpm+" rpm motor", rpm, ratio:6000/rpm, guess:false});
+}
 
 /* Identify an actuator from a part number and/or the CAD part name. */
 function hwFromPart(pn, name){
@@ -82,6 +92,8 @@ function specDetect(dev, mech, trust){
 
   // --- code wins ---
   if(wantsMotor){
+    const said=motorFromComment(dev.intent);
+    if(said) return said;
     if(cadSpec && cadSpec.kind === "motor") return Object.assign({src:"CAD part, code type"}, cadSpec);
     return Object.assign({src:"code"}, GENERIC.Motor);
   }

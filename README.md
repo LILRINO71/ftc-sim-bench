@@ -1,9 +1,9 @@
 # FTC Sim Bench
 
-**Drop in any FTC robot's STEP CAD and any OpMode. The bench resolves the assembly, runs your code on a virtual Driver Station — INIT, START, STOP — and lets you drive the result. Then it tells you what won't work before you find out on the field.**
+**Drop in any FTC robot's STEP CAD and any OpMode. The bench resolves the assembly, runs your code on a virtual Driver Station — INIT, START, STOP — and lets you drive the result on the real 2026-27 BIOBUZZ field. Then it tells you what won't work before you find out at an event.**
 
 **Live:** https://lilrino71.github.io/ftc-sim-bench/ — runs entirely in the browser; nothing is uploaded anywhere.
-One-click demos: [autonomous on the field](https://lilrino71.github.io/ftc-sim-bench/?opmode=sample-auto&start=1&view=field&right=graph) · [mecanum TeleOp](https://lilrino71.github.io/ftc-sim-bench/?opmode=sample-mecanum&start=1&view=field) · [arm + claw](https://lilrino71.github.io/ftc-sim-bench/?opmode=sample-claw)
+One-click demos: [shoot into the HIVE](https://lilrino71.github.io/ftc-sim-bench/?opmode=sample-shooter&pose=-40,-30,29&start=1&view=field&right=shot) · [autonomous on the field](https://lilrino71.github.io/ftc-sim-bench/?opmode=sample-auto&start=1&view=field&right=graph) · [mecanum TeleOp](https://lilrino71.github.io/ftc-sim-bench/?opmode=sample-mecanum&start=1&view=field) · [arm + claw](https://lilrino71.github.io/ftc-sim-bench/?opmode=sample-claw)
 
 ![The bench with a TeleOp loaded and initialised, waiting for START](docs/bench.png)
 
@@ -26,7 +26,8 @@ Real findings from real team code:
 
 - **Driver Station flow.** Pick an OpMode, INIT runs everything before `waitForStart()`, START runs the loop, STOP drops motor power. TeleOp gets a 2:00 match clock, Autonomous 0:30.
 - **Autonomous runs in order.** `sleep()` and wait loops hold the sequence while simulated time passes. `RUN_TO_POSITION`, `isBusy()`, `ElapsedTime` and `getRuntime()` behave as they do on the robot.
-- **Drive it.** An on-screen gamepad (both `gamepad1` and `gamepad2`), the keyboard, or a real USB controller. Tank and mecanum drivetrains drive around a 12 ft field of foam tiles; field-centric code reads the simulated IMU.
+- **Drive it on the real field.** An on-screen gamepad (both `gamepad1` and `gamepad2`), the keyboard, or a real USB controller. Tank and mecanum drivetrains drive the measured BIOBUZZ field — 141 in between the walls, 23.5 in tiles — and stop against the walls, the HIVE legs and foot bars, and the FLOWERs. Field-centric code reads the simulated IMU. The field view is the drivers' view from your alliance station.
+- **Shoot from your code.** Name a motor `flywheel` / `shooter` / `launcher` and a servo or motor `kicker` / `feeder` / `indexer` (or pick them in the Shot tab). When the feeder moves, a ball leaves at the speed your `setVelocity()` or `setPower()` gave the flywheel, from where the robot is, pointing where it points. It flies with drag and spin, and goes in, clips the lip or falls short. Three POLLEN on the staged NECTAR TIP the HIVE, and the up-CELL swings to the other side.
 - **Watch PID loops converge.** Encoders integrate from commanded power, so `getCurrentPosition()` feeds your own `PIDController` back. The Graph tab plots telemetry, servo positions, motor power and encoder counts.
 - **Tune live.** `static` fields show up as config variables you can edit while the OpMode runs, the way FTC Dashboard exposes `@Config` fields.
 - **Compare two versions** of a TeleOp control by control — the quickest way to see what changed between `teleop_v3` and `teleop_final`.
@@ -34,6 +35,21 @@ Real findings from real team code:
 - **Dark or light**, remembered between visits.
 
 ![An autonomous OpMode running on the field view with the telemetry graph open](docs/auto.png)
+
+## The BIOBUZZ field and the Shot tab
+
+![The shooter sample aimed at the red up-CELL: a green arc into the HIVE, a ball in flight, and the Shot tab saying POSSIBLE](docs/shot.png)
+
+The field is built from the [BIOBUZZ Shot Sim](https://github.com/LILRINO71/biobuzz-shot-sim)'s measured data — the leaning A-frame HIVEs, both bistable arms with their pentagonal CELLs, the four FLOWERs on the walls, LOADING ZONES, GARDENS, alliance areas, and every staged POLLEN and NECTAR. The same engine does the shot physics, vendored in `vendor/biobuzz-shot-sim` (`npm run sync-shot-sim` refreshes it).
+
+The **Shot** tab answers the questions a team has while writing the shooter code:
+
+- **Can you score from here?** POSSIBLE / NOT CONSISTENT / WON'T WORK for the robot's current spot, with the launch angle, exit speed and motor rpm the best shot needs.
+- **What should the code command?** With your fixed hood angle, the band of exit speeds that score from this spot — as `setVelocity(…)` ticks per second and as a power.
+- **Is the robot aimed?** How many degrees to turn, and whether a ball fired right now goes in. The arc in 3D shows it: solid green or red for your shot as it stands, dashed for the best one from here.
+- **What's in the HIVEs?** Grams in each up-CELL against the ~190 g it takes to TIP, TIPs and points. Buttons fire by hand (<kbd>F</kbd>), TIP a HIVE, or reset the field. INIT resets it too, like the field crew between matches.
+
+Link to a spot: `?pose=-40,-30,29` puts the robot at x −40 in, y −30 in, heading 29°; `?alliance=blue` switches sides.
 
 ## How it works
 
@@ -60,11 +76,12 @@ The idea that makes it work across thousands of different robots: **separate wha
 Open `docs/index.html` in a browser, or use the live link. To work on it:
 
 ```bash
-npm run build     # src/ → dist/ftc-sim-bench.html, dist/preview.html, docs/index.html
-npm test          # 34 tests, node --test, no dependencies
+npm run build           # src/ + vendor/ → dist/ftc-sim-bench.html, dist/preview.html, docs/index.html
+npm test                # 45 tests, node --test, no dependencies
+npm run sync-shot-sim   # refresh vendor/biobuzz-shot-sim from a checkout next to this one
 ```
 
-Zero runtime dependencies beyond three.js (r128, from cdnjs) and Google Fonts.
+Zero runtime dependencies beyond three.js (r128, from cdnjs) and Google Fonts; the Shot Sim engine is bundled in.
 
 ## Project layout
 
@@ -79,13 +96,17 @@ src/
   robotconfig.js  Robot Controller configuration .xml: parse and check hardwareMap names
   compare.js      control-by-control diff of two OpModes
   analyze.js      findings
+  field.js        the BIOBUZZ field: start poses, collisions, HIVE state, TIPs
+  shots.js        shooter and feeder from the code, ball flight, the fixed-hood speed window
   sim.js          Driver Station lifecycle, 50 Hz interpreter, autonomous stepper, encoders, PID, chassis
   view3d.js       three.js field and articulated robot        (browser only)
-  app.js          UI: tabs, gamepad, graph, rig editor, intake  (browser only)
+  app.js          UI: tabs, gamepad, graph, rig editor, Shot tab, intake  (browser only)
+vendor/biobuzz-shot-sim/   the Shot Sim engine and measured field data, with its source commit
 tests/
-  engine.test.mjs, features.test.mjs   run the real engine files in Node
+  engine.test.mjs, features.test.mjs, field.test.mjs   run the real engine files in Node
   fixtures/        hand-written STEP assembly, competition-style OpMode, robot configuration
-tools/build.mjs    single-file bundle for Pages and for sharing
+tools/build.mjs          single-file bundle for Pages and for sharing
+tools/sync-shot-sim.mjs  copies the Shot Sim engine and data into vendor/
 ```
 
 ## Honest limits
@@ -94,6 +115,8 @@ tools/build.mjs    single-file bundle for Pages and for sharing
 - **Don't tune PID gains here.** Motors have no inertia, gravity load or friction; use the bench to check *which way* a target drives a mechanism.
 - The interpreter covers the constructs TeleOps and autonomous routines actually use; it does not compile arbitrary Java. Anything it can't run is listed with its line number.
 - Calls into your own classes and path followers (Road Runner, Pedro Pathing) aren't simulated.
+- Collisions use the robot's footprint from the CAD box, in 2-D: walls, HIVE legs and foot bars, FLOWERs. There are no other robots, and no intake — the robot never runs out of balls.
+- The flywheel follows the commanded speed after the bench's usual motor slew; the dip after each shot and the spin-up time are in the Shot Sim's motor model, not the live run.
 
 ## License
 

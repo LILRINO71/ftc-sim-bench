@@ -114,6 +114,11 @@
           <span class="v" id="turretVal">55 %</span></div>
       </div>
       <div class="sec">
+        <div class="sec-head"><h3>Drive base</h3><span class="spacer"></span>
+          <div class="seg" id="frontSeg" aria-label="Which way the CAD's front faces"><button data-front="+x">+x</button><button data-front="+y">+y</button><button data-front="-x">−x</button><button data-front="-y">−y</button></div></div>
+        <p class="hint">Which way the CAD's front faces. The arrow on the floor is the drive base's forward, and the outline is what bumps into the walls, the HIVE legs and the FLOWERs.</p>
+      </div>
+      <div class="sec">
         <div class="sec-head"><h3>Portable rig</h3><span class="spacer"></span>
           <button class="btn-sm" id="rigCopy">Copy</button>
           <button class="btn-sm" id="rigApply">Apply</button>
@@ -189,6 +194,7 @@
   <aside class="rail rail-right" aria-label="Results">
     <nav class="tabs" role="tablist" data-tabs="right">
       <button role="tab" data-tab="checks" aria-selected="true">Checks <span class="count" id="checkCount"></span></button>
+      <button role="tab" data-tab="shot" aria-selected="false">Shot <span class="count" id="shotCount"></span></button>
       <button role="tab" data-tab="graph" aria-selected="false">Graph</button>
       <button role="tab" data-tab="compare" aria-selected="false">Compare</button>
     </nav>
@@ -197,6 +203,43 @@
       <div class="score" id="score"></div>
       <div id="findings"></div>
       <div id="ignoredWrap"></div>
+    </section>
+
+    <section class="pane" data-pane="shot" hidden>
+      <div class="verdict" id="shotVerdict" aria-live="polite"></div>
+      <div class="sec">
+        <div class="sec-head"><h3>Your shooter</h3><span class="spacer"></span>
+          <button class="btn-sm primary" id="fireBtn" title="Launch one ball now (F)">Fire <kbd>F</kbd></button></div>
+        <div class="shot-live" id="shotLive"></div>
+        <div class="shot-pick">
+          <label>Flywheel <select id="shotDev" aria-label="Flywheel motor"></select></label>
+          <label>Feeder <select id="shotFeed" aria-label="Feeder"></select></label>
+        </div>
+        <p class="hint">A ball launches when the feeder leaves its rest position (a servo) or runs (a motor), at the speed your code gives the flywheel.</p>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>HIVEs</h3><span class="spacer"></span><button class="btn-sm" id="fieldReset">Reset field</button></div>
+        <div id="hiveRows"></div>
+        <div class="shot-log" id="shotLog"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Setup</h3><span class="spacer"></span>
+          <label class="practice"><input type="checkbox" id="arcToggle" checked> show arc</label></div>
+        <div class="shot-form">
+          <span>Alliance</span><div class="seg" id="allySeg"><button data-al="red">red</button><button data-al="blue">blue</button></div>
+          <span>Ball</span><div class="seg" id="ballSeg"><button data-ball="pollen">POLLEN</button><button data-ball="nectar">NECTAR</button></div>
+          <span>Shooter</span><div class="seg" id="typeSeg"><button data-type="single">hood</button><button data-type="dual">two wheels</button></div>
+          <span>Shoots</span><div class="seg" id="mountSeg"><button data-mount="0">forward</button><button data-mount="180">backward</button></div>
+          <label for="hoodSlider">Launch angle</label>
+          <div class="slide"><input type="range" id="hoodSlider" min="40" max="88" step="1"><span class="v" id="hoodVal"></span></div>
+          <label for="h0Slider">Exit height</label>
+          <div class="slide"><input type="range" id="h0Slider" min="4" max="29" step="0.5"><span class="v" id="h0Val"></span></div>
+          <label for="motorSel">Motor</label><select id="motorSel"></select>
+          <label for="wheelSel">Wheel</label><select id="wheelSel"></select>
+          <label for="gearIn">Motor : wheel</label><div><input class="mini" id="gearIn" type="number" step="0.05" min="0.25" max="4"> <span class="dim">wheel turns per motor turn</span></div>
+        </div>
+        <p class="hint">Ball flight, drag, spin, the CELL lip and the frame come from the <a href="https://github.com/LILRINO71/biobuzz-shot-sim" target="_blank" rel="noopener">BIOBUZZ Shot Sim</a>. The setup saves with this robot's rig.</p>
+      </div>
     </section>
 
     <section class="pane" data-pane="graph" hidden>

@@ -1,5 +1,5 @@
 <title>FTC Sim Bench</title>
-<meta name="description" content="Drop in any FTC robot's STEP CAD and any OpMode. The bench reads the assembly, interprets the code at 50 Hz, and lets you drive the result with a virtual gamepad.">
+<meta name="description" content="Drop in any FTC robot's STEP CAD and any OpMode. The bench reads the assembly, interprets the code at 50 Hz, and lets you drive and shoot on the BIOBUZZ field with a virtual gamepad.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -261,7 +261,8 @@ button.rmbtn:hover{border-color:var(--fail); color:var(--fail);}
   background:rgba(9,12,17,.78); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:10px 16px; pointer-events:none; text-align:center;}
 .vp-hint small{display:block; font-family:var(--body); font-weight:400; font-size:12px; color:#8595A8; margin-top:2px;}
 .vp-bottom{position:absolute; left:12px; right:12px; bottom:10px; display:flex; align-items:flex-end; gap:12px; pointer-events:none;}
-.vp-readout{margin-left:auto; display:flex; align-items:center; gap:12px; font-family:var(--mono); font-size:10.5px; color:#8595A8; font-variant-numeric:tabular-nums; pointer-events:auto;}
+.vp-readout{margin-left:auto; display:flex; align-items:center; gap:12px; font-family:var(--mono); font-size:10.5px; color:#9FB0C4; font-variant-numeric:tabular-nums; pointer-events:auto;
+  background:rgba(9,12,17,.78); border:1px solid rgba(255,255,255,.08); border-radius:6px; padding:3px 4px 3px 9px;}
 .pip{width:250px; background:rgba(9,12,17,.82); border:1px solid rgba(255,255,255,.1); border-radius:6px; overflow:hidden; pointer-events:auto;}
 .pip-head{display:flex; justify-content:space-between; padding:5px 9px; font-family:var(--cond); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:#8595A8; border-bottom:1px solid rgba(255,255,255,.07);}
 .pip-head span:last-child{font-family:var(--mono); letter-spacing:0; color:#C9D6E4;}
@@ -354,6 +355,46 @@ kbd{display:inline-block; min-width:15px; padding:0 3px; border:1px solid var(--
 .ignored-head h4{font-family:var(--cond); font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--tx-3); margin:0;}
 .ign-row{display:flex; align-items:center; gap:9px; padding:6px 14px; border-top:1px solid var(--line-2); font-size:12px; color:var(--tx-3);}
 .ign-row .t{flex:1; text-decoration:line-through;}
+
+/* ================= shot ================= */
+.verdict{padding:13px 14px 12px; border-bottom:1px solid var(--line-2); border-left:4px solid var(--line);}
+.verdict.pass{border-left-color:var(--pass); background:linear-gradient(90deg,var(--pass-soft),transparent 80%);}
+.verdict.warn{border-left-color:var(--warn); background:linear-gradient(90deg,var(--warn-soft),transparent 80%);}
+.verdict.fail{border-left-color:var(--fail); background:linear-gradient(90deg,var(--fail-soft),transparent 80%);}
+.vhead{display:flex; align-items:baseline; gap:10px;}
+.vw{font-family:var(--cond); font-weight:700; font-size:22px; letter-spacing:.02em; line-height:1.1;}
+.verdict.pass .vw{color:var(--pass)} .verdict.warn .vw{color:var(--warn)} .verdict.fail .vw{color:var(--fail)}
+.vr{margin-left:auto; font-family:var(--mono); font-size:12px; font-weight:700; color:var(--tx-2); font-variant-numeric:tabular-nums;}
+.vs{font-size:12.5px; color:var(--tx-2); margin-top:4px; line-height:1.5;}
+.vk{display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:10px;}
+.vk div{text-align:center; padding:6px 4px; border-radius:5px; border:1px solid var(--line-2); background:var(--panel);}
+.vk b{display:block; font-family:var(--mono); font-size:15px; line-height:1.1; font-variant-numeric:tabular-nums; color:var(--tx);}
+.vk span{font-family:var(--cond); font-size:10px; text-transform:uppercase; letter-spacing:.09em; color:var(--tx-3);}
+.vwarn{font-size:12px; color:var(--warn); margin-top:6px;}
+.shot-live{display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--tx-2); line-height:1.5;}
+.shot-live b{color:var(--tx); font-weight:600;}
+.shot-live code{font-size:11px; background:var(--panel-2); border:1px solid var(--line-2); border-radius:3px; padding:0 4px; color:var(--tx);}
+.shot-live .ok{color:var(--pass)} .shot-live .bad{color:var(--fail)}
+.shot-pick{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px;}
+.shot-pick label{display:flex; flex-direction:column; gap:3px; font-family:var(--cond); font-size:10.5px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--tx-3); min-width:0;}
+.shot-form{display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px 12px; align-items:center;}
+.shot-form > span, .shot-form > label{font-size:12px; color:var(--tx-2); white-space:nowrap;}
+.shot-form .slide{margin-top:0;}
+.shot-form select{width:100%;}
+.shot-form a, .hint a{color:var(--accent);}
+.hive-row{padding:7px 0; border-top:1px solid var(--line-2);}
+.hive-row:first-child{border-top:none; padding-top:0;}
+.hive-top{display:flex; align-items:center; gap:8px; font-size:12.5px;}
+.hive-top .al{font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:.07em; padding:1px 6px; border-radius:3px; color:#fff;}
+.hive-top .al.red{background:#c9362f} .hive-top .al.blue{background:#2a6ad8}
+.hive-top .what{color:var(--tx-2); min-width:0;}
+.hive-top .btn-sm{margin-left:auto;}
+.tipbar{height:5px; margin-top:6px; background:var(--line-2); border-radius:3px; overflow:hidden;}
+.tipbar i{display:block; height:100%; background:var(--accent); border-radius:3px;}
+.hive-sub{display:flex; justify-content:space-between; font-family:var(--mono); font-size:10.5px; color:var(--tx-3); margin-top:3px; font-variant-numeric:tabular-nums;}
+.shot-log{margin-top:9px;}
+.shot-log div{font-family:var(--mono); font-size:11px; color:var(--tx-2); padding:3px 0; border-top:1px dashed var(--line-2);}
+.shot-log div span{color:var(--tx-3); margin-right:6px;}
 
 /* ================= graph ================= */
 .graph-bar{display:flex; align-items:center; gap:7px; padding:10px 14px; border-bottom:1px solid var(--line-2); position:sticky; top:0; background:var(--panel); z-index:2;}
@@ -541,6 +582,11 @@ kbd{display:inline-block; min-width:15px; padding:0 3px; border:1px solid var(--
           <span class="v" id="turretVal">55 %</span></div>
       </div>
       <div class="sec">
+        <div class="sec-head"><h3>Drive base</h3><span class="spacer"></span>
+          <div class="seg" id="frontSeg" aria-label="Which way the CAD's front faces"><button data-front="+x">+x</button><button data-front="+y">+y</button><button data-front="-x">−x</button><button data-front="-y">−y</button></div></div>
+        <p class="hint">Which way the CAD's front faces. The arrow on the floor is the drive base's forward, and the outline is what bumps into the walls, the HIVE legs and the FLOWERs.</p>
+      </div>
+      <div class="sec">
         <div class="sec-head"><h3>Portable rig</h3><span class="spacer"></span>
           <button class="btn-sm" id="rigCopy">Copy</button>
           <button class="btn-sm" id="rigApply">Apply</button>
@@ -616,6 +662,7 @@ kbd{display:inline-block; min-width:15px; padding:0 3px; border:1px solid var(--
   <aside class="rail rail-right" aria-label="Results">
     <nav class="tabs" role="tablist" data-tabs="right">
       <button role="tab" data-tab="checks" aria-selected="true">Checks <span class="count" id="checkCount"></span></button>
+      <button role="tab" data-tab="shot" aria-selected="false">Shot <span class="count" id="shotCount"></span></button>
       <button role="tab" data-tab="graph" aria-selected="false">Graph</button>
       <button role="tab" data-tab="compare" aria-selected="false">Compare</button>
     </nav>
@@ -624,6 +671,43 @@ kbd{display:inline-block; min-width:15px; padding:0 3px; border:1px solid var(--
       <div class="score" id="score"></div>
       <div id="findings"></div>
       <div id="ignoredWrap"></div>
+    </section>
+
+    <section class="pane" data-pane="shot" hidden>
+      <div class="verdict" id="shotVerdict" aria-live="polite"></div>
+      <div class="sec">
+        <div class="sec-head"><h3>Your shooter</h3><span class="spacer"></span>
+          <button class="btn-sm primary" id="fireBtn" title="Launch one ball now (F)">Fire <kbd>F</kbd></button></div>
+        <div class="shot-live" id="shotLive"></div>
+        <div class="shot-pick">
+          <label>Flywheel <select id="shotDev" aria-label="Flywheel motor"></select></label>
+          <label>Feeder <select id="shotFeed" aria-label="Feeder"></select></label>
+        </div>
+        <p class="hint">A ball launches when the feeder leaves its rest position (a servo) or runs (a motor), at the speed your code gives the flywheel.</p>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>HIVEs</h3><span class="spacer"></span><button class="btn-sm" id="fieldReset">Reset field</button></div>
+        <div id="hiveRows"></div>
+        <div class="shot-log" id="shotLog"></div>
+      </div>
+      <div class="sec">
+        <div class="sec-head"><h3>Setup</h3><span class="spacer"></span>
+          <label class="practice"><input type="checkbox" id="arcToggle" checked> show arc</label></div>
+        <div class="shot-form">
+          <span>Alliance</span><div class="seg" id="allySeg"><button data-al="red">red</button><button data-al="blue">blue</button></div>
+          <span>Ball</span><div class="seg" id="ballSeg"><button data-ball="pollen">POLLEN</button><button data-ball="nectar">NECTAR</button></div>
+          <span>Shooter</span><div class="seg" id="typeSeg"><button data-type="single">hood</button><button data-type="dual">two wheels</button></div>
+          <span>Shoots</span><div class="seg" id="mountSeg"><button data-mount="0">forward</button><button data-mount="180">backward</button></div>
+          <label for="hoodSlider">Launch angle</label>
+          <div class="slide"><input type="range" id="hoodSlider" min="40" max="88" step="1"><span class="v" id="hoodVal"></span></div>
+          <label for="h0Slider">Exit height</label>
+          <div class="slide"><input type="range" id="h0Slider" min="4" max="29" step="0.5"><span class="v" id="h0Val"></span></div>
+          <label for="motorSel">Motor</label><select id="motorSel"></select>
+          <label for="wheelSel">Wheel</label><select id="wheelSel"></select>
+          <label for="gearIn">Motor : wheel</label><div><input class="mini" id="gearIn" type="number" step="0.05" min="0.25" max="4"> <span class="dim">wheel turns per motor turn</span></div>
+        </div>
+        <p class="hint">Ball flight, drag, spin, the CELL lip and the frame come from the <a href="https://github.com/LILRINO71/biobuzz-shot-sim" target="_blank" rel="noopener">BIOBUZZ Shot Sim</a>. The setup saves with this robot's rig.</p>
+      </div>
     </section>
 
     <section class="pane" data-pane="graph" hidden>
@@ -647,6 +731,1626 @@ kbd{display:inline-block; min-width:15px; padding:0 3px; border:1px solid var(--
   </aside>
 </div>
 
+<script>
+window.SHOT_DATA = {"field":{"units":"in","frame":"origin = field centre on the tile top surface; +x toward the BLUE alliance wall (right, seen from the audience); +y away from the audience; +z up; headings from +x counter-clockwise","field":{"half":70.5,"wallHeight":11.6,"tile":23.5,"tileSeams":[-47,-23.5,0,23.5,47],"wallThickness":1,"wallHeightFromFloor":12.125,"tileThickness":0.59,"nominal":{"half":72,"tile":24}},"hive":{"pivotZ":43.95,"armDeg":30,"hiveX":{"red":-12.75,"blue":12.75},"upSideStart":{"red":-1,"blue":1},"cell":{"aIn":9.42,"aOut":21.46,"depth":12.04,"b0":-1.3625,"width":20,"height":14,"shoulder":7.61,"ringThickness":0.4,"lugBelowBase":1.6},"lipZ":53.5,"topZ":65.6,"swingClearanceWarnZ":25.5,"armBar":{"radius":0.8,"ab":[[-21.46,-2.2],[-4.4,-2.2],[-1.5,0],[1.5,0],[4.4,-2.2],[21.46,-2.2]]},"frame":{"tubeRadius":0.6,"legs":[[[-23.9,-18.95,0],[-12.4,0,42.45]],[[-23.9,18.95,0],[-12.4,0,42.45]],[[23.9,-18.95,0],[12.4,0,42.45]],[[23.9,18.95,0],[12.4,0,42.45]]],"crossbar":[[-12.4,0,41.8],[12.4,0,41.8]],"baseX":49.46,"baseY":38.95,"footBars":{"radius":0.6,"width":1.46,"segments":[[[-24,-19.475,0.5],[-24,19.475,0.5]],[[24,-19.475,0.5],[24,19.475,0.5]]]},"cornerBlocks":{"radius":1,"segments":[[[-12.4,0,41.3],[-12.4,0,44.6]],[[12.4,0,41.3],[12.4,0,44.6]]]},"logoPanels":{"optional":true,"thickness":0.25,"quads":[[[-13.9,-1.8,40],[13.9,-1.8,40],[13.9,-4.1,34.3],[-13.9,-4.1,34.3]],[[-13.9,1.8,40],[13.9,1.8,40],[13.9,4.1,34.3],[-13.9,4.1,34.3]]]}},"checks":{"lipUZ":[19.27,53.5],"topUZ":[12.27,65.62],"mouthCentroidBOffset":5.56,"mouthCentroidUZ":[16.49,58.32],"upCellMaxU":20.07,"downCellMaxU":25.15,"lowestZ":30.65,"legSlopeDxDz":0.271,"legSlopeDyDz":0.446}},"flowers":[{"x":-23.5,"y":68.2,"wall":"+y","footprint":6,"alongWall":5.9,"depth":4.8,"openingDia":4,"openingZ":21.5,"backstopTopZ":22.75},{"x":68.2,"y":23.5,"wall":"+x","footprint":6,"alongWall":5.9,"depth":4.8,"openingDia":4,"openingZ":21.5,"backstopTopZ":22.75},{"x":23.5,"y":-68.2,"wall":"-y","footprint":6,"alongWall":5.9,"depth":4.8,"openingDia":4,"openingZ":21.5,"backstopTopZ":22.75},{"x":-68.2,"y":-23.5,"wall":"-x","footprint":6,"alongWall":5.9,"depth":4.8,"openingDia":4,"openingZ":21.5,"backstopTopZ":22.75}],"loadingZones":{"red":{"x0":-70.5,"x1":-59.5,"y0":23.9,"y1":46.6},"blue":{"x0":59.5,"x1":70.5,"y0":-46.6,"y1":-23.9}},"gardens":{"red":{"x0":-70.5,"x1":-47.4,"y0":-70,"y1":-68},"blue":{"x0":47.4,"x1":70.5,"y0":68,"y1":70}},"allianceAreas":{"red":{"x0":-125.5,"x1":-71.5,"y0":-48.5,"y1":48.5},"blue":{"x0":71.5,"x1":125.5,"y0":-48.5,"y1":48.5}},"notes":["Field size: am-0481 perimeter is 141 in inside / 143 in outside; FTC Docs measured 3580 mm between inside faces. Manual figures scaled by their own 97 in and 54 in dimensions give 141.4 in inside and a 23.5 in tile pitch; the EFSG top view reproduces HIVE centre-to-centre 25.5 and frame width 49.46 only with a 23.5 in pitch. 144/24 are nominal (manual 9.1: +/-1 in general tolerance). Tile seams at 0, +/-23.5, +/-47; edge tiles trimmed.","Wall: 12.125 in from floor (am-0481) minus 0.59 in tile = 11.5; FTC Docs 313 mm total minus 13 mm tile = 11.8; 11.6 used (+/-0.2).","HIVE x: red HIVE on the red (-x) side in every top view; +/-12.75 from the 25.5 centre-to-centre; EFSG top view measures -12.73 / +12.78.","upSide at match start: red up-CELL on the audience side (sigma -1), blue up-CELL on the far side (sigma +1); agrees with the NECTAR staged in the up-CELLs and with the down-CELL of each HIVE facing the flower on its own side (-23.5,+y wall for red; +23.5,-y wall for blue).","CELL set is self-consistent: aOut = 18.84/2 + 12.04 = 21.46 (overall 42.92 vs published 42.91); b0 = (53.5 - 43.95 - 21.46*sin30)/cos30 = -1.3625 gives lip z 53.50. topZ 65.62 = lip + 14*cos30, which confirms tilt and 14 in height but not b0 on its own. Fig 9-9 scaled pivot-to-floor gives b0 = -1.45 (+/-0.1). Fig 9-10 side-view CELL corners match the model within 0.7 in.","The 20 x 14 x 7.61 pentagon is the inner opening; the ring adds ~0.4-0.5 in outside it (outer width 20.8 in top view) and a lug extends 1.6 in below the base at w = 0. Inner corners have ~0.5 in fillets (ignored).","Lowest down-CELL point is ~30.7 in (lug) / 31.6 in (ring corner); the 25.5 in label in Fig 9-10 does not match its own drawing scale. 25.5 kept only as the swing-clearance warning threshold.","Arm bar: 1 in square tube centred at b = -2.2 from a = +/-4.4 to +/-21.46 (through the ring lugs), V plates rising to a flat hub |a| <= 1.5 around the pivot. Radius 0.8 covers plates and lugs (b down to -3.0) and its top (-1.4) stays below b0.","Frame: each triangle leans inward in x (0.271 in per in of height) and its legs converge in y (0.446); leg centrelines meet at z ~42.45 at x = +/-12.4 (~0.35 in inboard of the pivot, within +/-0.5 in); leg base centres (+/-23.9, +/-18.95, 0). Legs ~1 in square tube (radius 0.6). Foot bars centred x = +/-24.0, outer faces at +/-24.73 = 49.46/2. Crossbar joins the top corners at z ~41.8; corner blocks hold the pivot cradles up to ~44.6. Measured from Fig 9-10 front and side views and the EFSG top view; +/-0.5 in.","Logo panels sit on the outer faces of the leaning legs, z 34.3-40.0, |x| <= 13.9; may be absent at events (manual 9.6.1), so treat as optional obstacles.","FLOWERs sit at perimeter panel joints, on seam lines +/-23.5 along their wall; opening axis ~2.3 +/- 0.3 in from the wall inner face. Top ring ~5.9 in along the wall x ~4.8 in deep; backstop 1.25 in above the 21.5 in opening.","LOADING ZONE: 11 +/- 0.125 in deep from the wall; long tape edges run on the inner edge of the tile-seam tabs (~0.4 in inside seams 23.5 and 47), giving ~22.7 in. Red on tile A5, blue on F2.","GARDEN: 2 in tape on tile A1 (red) / F6 (blue), from the side wall to the inner tab edge of the next seam (~23.1 in); its wall-side edge sits ~0.5 in off the wall on the trimmed tile tabs.","ALLIANCE AREA: tape inner edges on the outside of seams 1 and 5, outer width ~97 in (y +/-48.5); 54 +/- 1 in deep from the perimeter outer face (x = +/-71.5)."],"sources":["https://ftc-resources.firstinspires.org/ftc/game/manual - Competition Manual V1: 9.1, 9.2, 9.3 Fig 9-2 and 9-3, 9.4 Fig 9-4 and 9-5, 9.5 Fig 9-6, 9.6.1 Fig 9-7 and 9-8, 9.6.2 Fig 9-9, 9-10, 9-11, 9.7 Fig 9-12, 10.3.1 Fig 10-2","https://ftc-resources.firstinspires.org/ftc/archive/2027/field/eventfieldguide - Event Field Setup Guide V1.0: 7.2-7.5, 8.3-8.5, 9.1-9.4, 10.1-10.3, 11.1 (HIVE top view with tile seams)","https://andymark.com/products/first-tech-challenge-perimeter-kit - am-0481 height 12.125 in, inside 11 ft 9 in, outside 11 ft 11 in (vendor listing)","https://ftc-docs.firstinspires.org/en/latest/game_specific_resources/field_coordinate_system/field-coordinate-system.html - 3580 mm between inside faces, 313 mm perimeter height, 13 mm tiles (2016 field measurement)"]},"motors":{"family":"goBILDA 5203 Series Yellow Jacket Planetary Gear Motor","shaft":"8 mm REX (hex)","retrieved":"2026-09-12","shaftNotes":"8 mm REX is goBILDA's hybrid shaft profile, not a plain hex: an 8 mm round section combined with a 7 mm hex section. The round part runs in 8 mm round-bore bearings; the hex part gives positive drive to REX-bore hubs, pulleys and wheels, so treat it as a hex drive (goBILDA 8 mm REX shaft SKU 2106-4008-0800; the old URL https://www.gobilda.com/2106-series-stainless-steel-rex-shaft-8mm-diameter-80mm-length/ now redirects to https://www.gobilda.com/8mm-rex-shaft-with-e-clip-stainless-steel-80mm-length/; background: https://www.gobilda.com/blog/8mm-rex-the-shaft-youve-been-waiting-for/). Every 5203 spec table reads RS-555 brushed DC, 12 VDC nominal, planetary with steel gears, output shaft 8 mm REX, 24 mm length; the category page (https://www.gobilda.com/yellow-jacket-planetary-gear-motors/) adds that the shaft steps up to 9 mm inside the 36 mm gearbox head on two ball bearings. Shaft lengths: there is no 48 mm Yellow Jacket. The long-shaft twin is the 5204 Series (5204-8002-00xx, 8 mm REX, 80 mm length), 10 ratios from 3.7:1 to 188:1 with no 1:1; its speed, currents, stall torque and encoder resolution match the 5203 of the same ratio (re-checked live on 3.7:1 and 19.2:1), so a 5204 uses the same row here. The 11 ratios below are the complete 5203 lineup on the category page. ratio is goBILDA's nominal label; the exact planetary ratios, from stages of 1+46/17 and 1+46/11, are 3.7:1 = 3.7059, 5.2:1 = 5.1818, 13.7:1 = 13.7336, 19.2:1 = 19.2032, 26.9:1 = 26.8512, 50.9:1 = 50.8950, 71.2:1 = 71.1648, 99.5:1 = 99.5075, 139:1 = 139.1382, 188:1 = 188.6108. encoderPPR = counts per output-shaft revolution = 28 x exact ratio, goBILDA's own formula. The 71.2:1 page prints 1,993.6 (28 x the rounded 71.2) while its formula gives 1992.6; 1992.6 is used. freeRpm is goBILDA's theoretical no-load speed at 12 V; the bare 5000-series motor page (5000-0002-4008) lists 6000 rpm theoretical and 5800 rpm tested. No-load current 0.25 A and stall current 9.2 A are motor figures and are identical on every page. Stall torque is as printed, converted at 1 kg.cm = 0.0980665 N.m. Not included: 5202 Series (6 mm D-shaft), 5303/5304 Saturn motors (8 mm REX but 24 V RS-560, and goBILDA says they are not FTC legal), the 5000-0002-4008 bare motor with a REX pinion (no gearbox; electrically the 1:1 row), 5103 gearboxes (no motor). All 11 product pages were fetched live on 2026-09-12: HTTP 200, no redirects, spec tables parsed from the HTML.","motors":[{"id":"yj6000","sku":"5203-2402-0001","label":"6000 rpm · 1:1","ratio":1,"freeRpm":6000,"stallTorqueKgCm":1.47,"stallTorqueNm":0.1442,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":28,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-motor-1-1-ratio-24mm-length-8mm-rex-shaft-6000-rpm-3-3-5v-encoder/"},{"id":"yj1620","sku":"5203-2402-0003","label":"1620 rpm · 3.7:1","ratio":3.7,"freeRpm":1620,"stallTorqueKgCm":5.4,"stallTorqueNm":0.5296,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":103.8,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-3-7-1-ratio-1620-rpm-3-3-5v-encoder/"},{"id":"yj1150","sku":"5203-2402-0005","label":"1150 rpm · 5.2:1","ratio":5.2,"freeRpm":1150,"stallTorqueKgCm":7.9,"stallTorqueNm":0.7747,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":145.1,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-5-2-1-ratio-24mm-length-8mm-rex-shaft-1150-rpm-3-3-5v-encoder/"},{"id":"yj435","sku":"5203-2402-0014","label":"435 rpm · 13.7:1","ratio":13.7,"freeRpm":435,"stallTorqueKgCm":18.7,"stallTorqueNm":1.8338,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":384.5,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-13-7-1-ratio-24mm-length-8mm-rex-shaft-435-rpm-3-3-5v-encoder/"},{"id":"yj312","sku":"5203-2402-0019","label":"312 rpm · 19.2:1","ratio":19.2,"freeRpm":312,"stallTorqueKgCm":24.3,"stallTorqueNm":2.383,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":537.7,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-19-2-1-ratio-24mm-length-8mm-rex-shaft-312-rpm-3-3-5v-encoder/"},{"id":"yj223","sku":"5203-2402-0027","label":"223 rpm · 26.9:1","ratio":26.9,"freeRpm":223,"stallTorqueKgCm":38,"stallTorqueNm":3.7265,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":751.8,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-26-9-1-ratio-24mm-length-8mm-rex-shaft-223-rpm-3-3-5v-encoder/"},{"id":"yj117","sku":"5203-2402-0051","label":"117 rpm · 50.9:1","ratio":50.9,"freeRpm":117,"stallTorqueKgCm":68.4,"stallTorqueNm":6.7077,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":1425.1,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-50-9-1-ratio-24mm-length-8mm-rex-shaft-117-rpm-3-3-5v-encoder/"},{"id":"yj84","sku":"5203-2402-0071","label":"84 rpm · 71.2:1","ratio":71.2,"freeRpm":84,"stallTorqueKgCm":93.6,"stallTorqueNm":9.179,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":1992.6,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-71-2-1-ratio-24mm-length-8mm-rex-shaft-84-rpm-3-3-5v-encoder/"},{"id":"yj60","sku":"5203-2402-0100","label":"60 rpm · 99.5:1","ratio":99.5,"freeRpm":60,"stallTorqueKgCm":133.2,"stallTorqueNm":13.0625,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":2786.2,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-99-5-1-ratio-24mm-length-8mm-rex-shaft-60-rpm-3-3-5v-encoder/"},{"id":"yj43","sku":"5203-2402-0139","label":"43 rpm · 139:1","ratio":139,"freeRpm":43,"stallTorqueKgCm":185,"stallTorqueNm":18.1423,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":3895.9,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-139-1-ratio-24mm-length-8mm-rex-shaft-43-rpm-3-3-5v-encoder/"},{"id":"yj30","sku":"5203-2402-0188","label":"30 rpm · 188:1","ratio":188,"freeRpm":30,"stallTorqueKgCm":250,"stallTorqueNm":24.5166,"stallCurrentA":9.2,"freeCurrentA":0.25,"encoderPPR":5281.1,"voltage":12,"url":"https://www.gobilda.com/5203-series-yellow-jacket-planetary-gear-motor-188-1-ratio-24mm-length-8mm-rex-shaft-30-rpm-3-3-5v-encoder/"}]},"shooter":{"version":"2026-09-12","wheels":[{"id":"gecko96","label":"goBILDA 96 mm Gecko","sku":"3613-0014-0096","diameterMm":96,"massG":105,"inertiaModel":"disc k=0.50","inertiaKgM2":0.000121,"url":"https://www.gobilda.com/gripforce-gecko-wheel-14mm-bore-96mm-diameter/"},{"id":"gecko72","label":"goBILDA 72 mm Gecko","sku":"3613-0014-0072","diameterMm":72,"massG":52,"inertiaModel":"disc k=0.50","inertiaKgM2":0.0000337,"url":"https://www.gobilda.com/gripforce-gecko-wheel-14mm-bore-72mm-diameter-30a-durometer/"},{"id":"hogback96","label":"goBILDA 96 mm Hogback Traction","sku":"3626-0014-0096","diameterMm":96,"massG":82,"inertiaModel":"rim-weighted k=0.60","inertiaKgM2":0.000113,"url":"https://www.gobilda.com/hogback-traction-wheel-96mm-diameter-50a-durometer/"},{"id":"hogback72","label":"goBILDA 72 mm Hogback Traction","sku":"3626-0014-0072","diameterMm":72,"massG":55,"inertiaModel":"rim-weighted k=0.60","inertiaKgM2":0.0000428,"url":"https://www.gobilda.com/hogback-traction-wheel-72mm-diameter-50a-durometer/"},{"id":"thinrhino96","label":"goBILDA 96 mm Thin Rhino","sku":"3612-0014-0096","diameterMm":96,"massG":91,"inertiaModel":"rim-weighted k=0.60","inertiaKgM2":0.000126,"url":"https://www.gobilda.com/3612-series-thin-rhino-wheel-14mm-bore-96mm-diameter/"},{"id":"rhino96","label":"goBILDA 96 mm Rhino (32 mm wide)","sku":"3601-0014-0096","diameterMm":96,"massG":142,"inertiaModel":"rim-weighted k=0.60","inertiaKgM2":0.000196,"url":"https://www.gobilda.com/3601-series-rhino-wheel-14mm-bore-96mm-diameter/"}],"addOns":[{"id":"steel82","label":"goBILDA Steel Flywheel 82 mm","sku":"3628-0032-0082","diameterMm":82,"massG":152,"inertiaKgM2":0.0001651,"inertiaModel":"published by goBILDA (1651 g·cm²)","mountsTo":"96 mm Hogback Traction Wheel pattern, or the goBILDA 32 mm square pattern","url":"https://www.gobilda.com/steel-flywheel-82mm-diameter-152g-1651-g-cm/"},{"id":"steel60","label":"goBILDA Steel Flywheel 60 mm","sku":"3628-0014-0060","diameterMm":60,"massG":115,"inertiaKgM2":0.0000551,"inertiaModel":"published by goBILDA (551 g·cm²)","mountsTo":"72 mm Hogback Traction Wheel, or the goBILDA 16 mm / 32 mm square patterns","url":"https://www.gobilda.com/steel-flywheel-60mm-diameter-115g-551-g-cm/"},{"id":"hubShaft","label":"Aluminium hub + 8 mm REX shaft (per hub)","inertiaKgM2":0.000005,"inertiaModel":"estimate: ~15 g hub at r ≈ 16 mm plus a share of a steel shaft; negligible next to the wheels"}],"inertiaPresets":[{"id":"light","label":"1 wheel","detail":"One 96 mm Gecko + hub + shaft: 1.21e-4 + 0.05e-4 ≈ 1.3e-4 kg·m²","inertiaKgM2":0.00013},{"id":"medium","label":"2 wheels + steel flywheel","detail":"Two 96 mm Geckos + one 82 mm goBILDA Steel Flywheel + hubs: 2 × 1.21e-4 + 1.65e-4 + 0.1e-4 ≈ 4.2e-4, rounded to 4.0e-4 kg·m² (the SPEC §9 reference inertia; within the ±25 % wheel estimate)","inertiaKgM2":0.0004},{"id":"heavy","label":"2 wheels + 3 steel flywheels","detail":"Two 96 mm Geckos + three 82 mm goBILDA Steel Flywheels + hubs: 2 × 1.21e-4 + 3 × 1.65e-4 + 0.1e-4 ≈ 7.5e-4 kg·m²","inertiaKgM2":0.00075}],"model":{"etaSingle":0.45,"etaDual":0.9,"lossFactor":2,"sigmaMotor":{"h1":0.8,"h2":0.95,"s0":0.005,"s1":0.03,"s2":0.06},"downgradeHeadroom":0.92,"thresholds":{"possible":0.8,"notConsistent":0.4},"freeSpeedFactor":0.97,"etaSingleRange":[0.3,0.5],"etaDualRange":[0.8,0.95],"ratedV":12,"batteryV":12,"batteryRangeV":[11,13.5],"openLoopSwingV":1.2},"uncertainty":{"etaSingle":[0.3,0.5],"etaDual":[0.75,1],"lossFactor":[2,3.5],"wheelInertiaPct":25},"precision":{"dialed":{"label":"Dialed-in","sigThetaDeg":0.5,"sigYawDeg":0.5,"sigShooter":0.01},"typical":{"label":"Typical","sigThetaDeg":1,"sigYawDeg":1,"sigShooter":0.015},"rough":{"label":"Rough","sigThetaDeg":2,"sigYawDeg":2,"sigShooter":0.03}},"defaults":{"type":"single","wheelId":"gecko96","motorsPerWheel":1,"gear":1,"topRatio":0.6,"inertiaPreset":"medium","shotInterval":0.5,"h0":16,"precision":"typical","motorFreeRpm":6000,"control":"pid","wheelsPerShaft":2,"addOn":"steel82","batteryV":12},"notes":["Wheel inertia: I = k·m·r² with r = D/2 and m from goBILDA's spec table. Gecko wheels (silicone spokes and tread on a small plastic core) use the solid-disc value k = 0.5, which is slightly conservative. Hogback and Rhino wheels (rigid plastic core with a rubber tread band at the rim) use a rim-weighted k = 0.6. For comparison, goBILDA's published steel flywheel values work out to k = 0.53 (60 mm) and k = 0.65 (82 mm). Treat the wheel values as ±25 %.","Inertia on one shaft adds up: wheels + hubs + steel discs. An inertia wheel geared to spin g times faster than the shooter wheel counts as g²·I. Hubs and the 8 mm REX shaft add about 5e-6 kg·m² each. goBILDA does not publish motor rotor inertia, so it is left out; it is small next to these presets.","Inertia presets are per wheel shaft. Two 96 mm wheels plus hubs alone come to only about 2.5e-4 kg·m². Reaching the ≈4e-4 default takes one 82 mm steel flywheel, so the medium label says that. goBILDA lists this flywheel as a related product for its DECODE Starter Bot, and its product page describes it as a way to add rotational inertia to launcher systems.","15A-durometer GripForce Gecko variants weigh about the same (96 mm 15A: 102 g), so they can reuse the 30A entries.","etaSingle 0.45 (kept). In no-slip theory the ball rolls on the fixed hood, so its centre leaves at 0.5 × the wheel's surface speed at the moment of exit (Brettle 2023; Team 449, 2026). The wheel also slows during the shot. Measured against the pre-shot set speed, the ideal ratio for POLLEN is 0.47 at I = 4e-4 and 0.42 at I = 1.3e-4. FRC teams shooting squishy foam balls report lower values: 30 % was standard in one team's prototypes, and 20–45 % is a typical guess (Chief Delphi, 2021). A tennis-ball test posted in 2026 reached about 56 % of the ideal kinetic energy, which is about 0.37 of surface speed. So 0.45 is the optimistic end. It fits a stiff hollow ball on a soft 30A wheel with light compression. Calibrate it with slow-motion video. At 0.35, every required wheel rpm goes up by 29 %.","etaDual 0.90 (kept). In the ideal model, a ball squeezed between two counter-rotating wheels leaves at the average of their two surface speeds (Team 449 dual-flywheel model, as used in ReCalc; Chief Delphi, 2021). Counting the wheels slowing during contact, the ideal is about 0.91 at a combined 4e-4 kg·m² and 0.95 at 7.5e-4. Slip and compression losses pull real shooters lower; 0.75–0.90 is plausible.","lossFactor 2.0 (kept). In the no-slip impulse model the wheel loses twice the ball's translational + rotational kinetic energy in the high-inertia limit, for both the single-wheel hood and the dual-wheel case, so efficiency is at most 50 % (Brettle 2023). The value computed for POLLEN at I = 4e-4 is 2.06. Real slip only adds loss, so 2.0 is a floor; 2–3.5 is plausible.","Spin: single hood S0 = 1 (the ball rolls on the hood, so ω·r = v). Dual S0 = (1 − k)/(1 + k), which matches the Team 449 relations v = (v1 + v2)/2 and ω·r = (v1 − v2)/2. The default topRatio 0.6 gives S0 = 0.25.","Headroom (sigmaMotor knees 0.80 / 0.95 and downgradeHeadroom 0.92, kept) matches common practice. Size the shooter so the shot speed is reachable at about 8 V of a 12 V battery (Chief Delphi, 2016). Set the target at the speed the wheel reaches with about 10 V applied, roughly 0.74–0.80 of full-battery free speed (FTC DECODE shooter blog, 2025). Leave 10–30 % headroom above the on-shot speed (YETI wiki).","DECODE (2025-26) sanity check. Fixed ~58–60° DECODE shooters needed about 4.4–6.9 m/s to score the 5 in, 0.165 lb perforated ARTIFACT balls. At etaSingle 0.45 on a 96 mm wheel, that is about 1,930–3,050 wheel rpm, or 32–51 % of a 6000 rpm motor at G = 1. goBILDA's DECODE Starter Bot sample code holds its single high-speed launcher motor (driving two launcher wheels) at 1,125 encoder counts/s for close shots. If that motor is the 28-count 6000 rpm Yellow Jacket, that is about 2,410 rpm, or 40 % of free speed. The BIOBUZZ POLLEN reference shot (5.05 m/s → about 2,230 wheel rpm, h ≈ 0.37 on a 96 mm hood) sits in the same range.","SPEC §9 motor check with these values: 6000 rpm motor, 96 mm wheel, single hood, 5.05 m/s exit → 2,233 wheel rpm, h = 0.372. With I = 4.0e-4 (medium preset), POLLEN dip = 4.87 %.","No external data backs sigmaMotor, the verdict thresholds or the precision presets. They are SPEC design choices and are carried over unchanged.","freeSpeedFactor 0.97: goBILDA lists the bare 1:1 motor at 6000 rpm theoretical and 5800 rpm tested; usable free speed = freeRpm x 0.97.","Battery: DC motor free speed and stall torque scale with voltage (V/12). PID velocity control can command up to the full battery voltage but never more, so it cannot raise the top speed; it holds the setpoint and recovers at full power. Fixed-power (open-loop) speed follows the battery, assumed to swing 1.2 V over a match."],"sources":[{"title":"goBILDA GripForce Gecko Wheel, 14 mm bore, 96 mm (SKU 3613-0014-0096): 105 g, silicone rubber on plastic core, 30A","url":"https://www.gobilda.com/gripforce-gecko-wheel-14mm-bore-96mm-diameter/"},{"title":"ServoCity mirror of the same 96 mm Gecko listing (105 g)","url":"https://www.servocity.com/3613-series-gecko-wheel-14mm-bore-96mm-diameter/"},{"title":"goBILDA GripForce Gecko Wheel, 14 mm bore, 72 mm, 30A (SKU 3613-0014-0072): 52 g","url":"https://www.gobilda.com/gripforce-gecko-wheel-14mm-bore-72mm-diameter-30a-durometer/"},{"title":"goBILDA GripForce Gecko Wheel, 14 mm bore, 96 mm, 15A (SKU 3632-0014-0096): 102 g","url":"https://www.gobilda.com/gripforce-gecko-wheel-14mm-bore-96mm-diameter-15a-durometer/"},{"title":"goBILDA GripForce Gecko Wheels category (all sizes and durometers)","url":"https://www.gobilda.com/gecko-wheels"},{"title":"goBILDA Hogback Traction Wheel 96 mm, 50A (SKU 3626-0014-0096): 82 g","url":"https://www.gobilda.com/hogback-traction-wheel-96mm-diameter-50a-durometer/"},{"title":"goBILDA Hogback Traction Wheel 72 mm, 50A (SKU 3626-0014-0072): 55 g","url":"https://www.gobilda.com/hogback-traction-wheel-72mm-diameter-50a-durometer/"},{"title":"goBILDA 3601 Series Rhino Wheel 96 mm (SKU 3601-0014-0096): 142 g, 32 mm wide","url":"https://www.gobilda.com/3601-series-rhino-wheel-14mm-bore-96mm-diameter/"},{"title":"goBILDA 3612 Series Thin Rhino Wheel 96 mm (SKU 3612-0014-0096): 91 g","url":"https://www.gobilda.com/3612-series-thin-rhino-wheel-14mm-bore-96mm-diameter/"},{"title":"goBILDA Steel Flywheel 82 mm (SKU 3628-0032-0082): 152 g, 1651 g·cm²","url":"https://www.gobilda.com/steel-flywheel-82mm-diameter-152g-1651-g-cm/"},{"title":"goBILDA Steel Flywheel 60 mm (SKU 3628-0014-0060): 115 g, 551 g·cm²","url":"https://www.gobilda.com/steel-flywheel-60mm-diameter-115g-551-g-cm/"},{"title":"goBILDA Flywheels category","url":"https://www.gobilda.com/flywheels/"},{"title":"goBILDA FTC Starter Bot Resource Guide (DECODE), which lists the 82 mm Steel Flywheel as a related product","url":"https://www.gobilda.com/ftc-starter-bot-resource-guide-decode/"},{"title":"DECODE StarterBotTeleop sample (FIRST / goBILDA, 2025), team copy: LAUNCHER_TARGET_VELOCITY = 1125","url":"https://github.com/InventorProgram/RamazRoboticsFTC/blob/master/TeamCode/src/main/java/org/firstinspires/ftc/teamcode/StarterBotTeleop.java"},{"title":"D. Brettle (FRC 199), Flywheel Shooter Analysis: no-slip hooded model, exit = half surface speed, efficiency < 50 %","url":"https://docs.carlmontrobotics.org/jupyter_notebooks/files/FlywheelShooter.html"},{"title":"Chief Delphi: New Flywheel Shooter Analysis (2023), with the author's design guidance ω_wf = 2·v_p/r_w","url":"https://www.chiefdelphi.com/t/new-flywheel-shooter-analysis/439111"},{"title":"R. Pedersen (FRC 449), Flywheel Shot Analysis: Correction and Extension (May 2026), dual-flywheel and corrected hooded models","url":"https://robot.mbhs.edu/media/whitepapers/2026/flywheel-calculations-latest.pdf"},{"title":"Chief Delphi: Flywheel Shot Analysis: Correction and Extension (2026), including the tennis-ball kinetic-energy test","url":"https://www.chiefdelphi.com/t/flywheel-shot-analysis-correction-and-extension/520270"},{"title":"ReCalc ballShot.ts, the implementation of the Team 449 single-hooded and dual-shooter equations","url":"https://github.com/tervay/recalc/blob/main/app/lib/math/ballShot.ts"},{"title":"Chief Delphi: Determine flywheel velocity for ball exit velocity (2021): hood ≈ 1/2, opposed wheels ≈ surface speed, measured 20–45 % and 30 %","url":"https://www.chiefdelphi.com/t/determine-flywheel-velocity-for-ball-exit-velocity/394940"},{"title":"Chief Delphi: Converting shot speed to shooter's wheel speed (2026)","url":"https://www.chiefdelphi.com/t/converting-shot-speed-to-shooters-wheel-speed/513649"},{"title":"Chief Delphi: Flywheel Shooter Speed (2016): closed-loop voltage headroom","url":"https://www.chiefdelphi.com/t/flywheel-shooter-speed/146808"},{"title":"YETI Robotics wiki, Shooter Designs: add mass for velocity hold-up, 10–30 % headroom","url":"https://wiki.yetirobotics.org/books/design-process/page/shooter-designs"},{"title":"N. Vikramaditya, Programming a DECODE shooter (2025): 4.36 / 5.8 / 6.9 m/s launch speeds","url":"https://medium.com/@vikramaditya.nishant/programming-a-decode-shooter-4ab114dac01f"},{"title":"N. Vikramaditya, Programming a hooded DECODE shooter (2025): target set at ~10 V","url":"https://medium.com/@vikramaditya.nishant/programming-a-hooded-decode-shooter-463d6a71832f"},{"title":"AndyMark DECODE game pieces: ARTIFACT 5 in diameter, 0.165 lb","url":"https://andymark.com/products/ftc-25-26-am-3376a"}]}};
+/*
+ * BIOBUZZ Shot Sim - physics, geometry, search, verdict and motor engine.
+ * No DOM, no dependencies. UMD: module.exports (Node) / self.ShotEngine (worker) / window.ShotEngine.
+ *
+ * Units: positions in inches (field frame, origin at field centre on the tile top, +x toward BLUE,
+ * +y away from the audience, +z up), speeds in m/s, angles in degrees, headings CCW from +x.
+ * Ball flight is integrated in SI and stored as Int16 millimetres.
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.ShotEngine = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  // ------------------------------------------------------------------ constants
+  var IN_M = 0.0254;
+  var LB_KG = 0.45359237;
+  var IPM = 1 / 25.4;            // inches per millimetre
+  var MPI = 25.4;                // millimetres per inch
+  var DEG = Math.PI / 180;
+
+  // Air + aerodynamics (SPEC 4). Not in the data files; data.shooter.aero may override.
+  var AERO_DEFAULT = { rho: 1.20, g: 9.81, cd: 0.45, clSlope: 0.20, clSMax: 1.0 };
+
+  // Balls (SPEC 4). data.shooter.balls may override.
+  var BALLS_DEFAULT = {
+    pollen: { id: 'pollen', label: 'POLLEN', Din: 2.80, massLb: 0.055, wallIn: 0.070 },
+    nectar: { id: 'nectar', label: 'NECTAR', Din: 91.948 / 25.4, massLb: 0.091, wallIn: 2.159 / 25.4 }
+  };
+
+  // Trajectory table (SPEC 4)
+  var TBL = { th0: 10, th1: 89, v0: 2.0, vRatio: 1.02, vMax: 16, dt: 0.0025, storeEvery: 2,
+    tMax: 2.6, rhoMax: 5.6, zStopDesc: 0.55 };
+  var MAX_SAMPLES = Math.ceil(TBL.tMax / (TBL.dt * TBL.storeEvery)) + 3;
+
+  // Miss causes
+  var C_HIT = 0, C_SHORT = 1, C_LONG = 2, C_LIP = 3, C_ROOF = 4, C_CELL = 5, C_FRAME = 6, C_WALL = 7, C_FLOOR = 8;
+  var CAUSE_NAMES = ['hit', 'short', 'long', 'lip', 'roof', 'cell', 'frame', 'wall', 'floor'];
+
+  // Obstacle kinds
+  var K_SHELL = 1, K_PRISM = 2, K_ARM = 3, K_CAPSULE = 4;
+
+  var VERDICT = { OK: 'POSSIBLE', MID: 'NOT CONSISTENT', BAD: "WON'T WORK" };
+
+  function now() {
+    return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  }
+
+  // ------------------------------------------------------------------ math helpers
+  // erf: W. J. Cody-style rational approximation would be more exact; Abramowitz-Stegun 7.1.26
+  // (|error| <= 1.5e-7) is plenty for cell masses.
+  function erf(x) {
+    var sign = x < 0 ? -1 : 1;
+    var ax = x < 0 ? -x : x;
+    var t = 1 / (1 + 0.3275911 * ax);
+    var y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-ax * ax);
+    return sign * y;
+  }
+  function Phi(x) { return 0.5 * (1 + erf(x / Math.SQRT2)); }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+  function fmtInt(n) {
+    var s = String(Math.round(Math.abs(n)));
+    var out = '';
+    while (s.length > 3) { out = ',' + s.slice(-3) + out; s = s.slice(0, -3); }
+    return (n < 0 ? '-' : '') + s + out;
+  }
+  function fmt(n, d) { return Number(n).toFixed(d); }
+  function pct(x) { return Math.round(x * 100) + '%'; }
+
+  // point-segment squared distance in 3-D
+  function segDist2(px, py, pz, ax, ay, az, bx, by, bz) {
+    var dx = bx - ax, dy = by - ay, dz = bz - az;
+    var L2 = dx * dx + dy * dy + dz * dz;
+    var t = L2 > 0 ? ((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / L2 : 0;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    var ex = px - ax - t * dx, ey = py - ay - t * dy, ez = pz - az - t * dz;
+    return ex * ex + ey * ey + ez * ez;
+  }
+  function seg2Dist2(px, py, ax, ay, bx, by) {
+    var dx = bx - ax, dy = by - ay;
+    var L2 = dx * dx + dy * dy;
+    var t = L2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    var ex = px - ax - t * dx, ey = py - ay - t * dy;
+    return ex * ex + ey * ey;
+  }
+
+  function convexHull(pts) {
+    var p = pts.slice().sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+    if (p.length < 3) return p;
+    function cross(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+    var lower = [], upper = [], i;
+    for (i = 0; i < p.length; i++) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p[i]) <= 0) lower.pop();
+      lower.push(p[i]);
+    }
+    for (i = p.length - 1; i >= 0; i--) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p[i]) <= 0) upper.pop();
+      upper.push(p[i]);
+    }
+    upper.pop(); lower.pop();
+    return lower.concat(upper);
+  }
+
+  // ------------------------------------------------------------------ state
+  var S = {
+    ready: false, data: null, G: null, aero: null, balls: null, model: null, shooterData: null,
+    motors: [], motorById: {}, tables: {}, tableKeys: [], obsCache: {}, gridCache: [], ctxCache: []
+  };
+
+  function num(v, d) { return (typeof v === 'number' && isFinite(v)) ? v : d; }
+
+  // ------------------------------------------------------------------ init
+  function init(data) {
+    if (!data || !data.field || !data.motors || !data.shooter) throw new Error('ShotEngine.init needs {motors, field, shooter}');
+    var F = data.field, H = F.hive, C = H.cell, fr = H.frame;
+    var armRad = H.armDeg * DEG;
+    var G = {
+      half: F.field.half,
+      wallTop: F.field.wallHeight,
+      leave: F.field.half + 6,
+      robotLimit: F.field.half - 9,
+      pz: H.pivotZ, ca: Math.cos(armRad), sa: Math.sin(armRad), armDeg: H.armDeg,
+      hx: { red: H.hiveX.red, blue: H.hiveX.blue },
+      upStart: { red: H.upSideStart.red, blue: H.upSideStart.blue },
+      aIn: C.aIn, aOut: C.aOut, depth: C.aOut - C.aIn,
+      b0: C.b0, W2: C.width / 2, SH: C.shoulder, HT: C.height,
+      swingWarnZ: num(H.swingClearanceWarnZ, 25.5),
+      armR: H.armBar.radius, armAB: H.armBar.ab.map(function (p) { return [p[0], p[1]]; }),
+      tubeR: fr.tubeRadius,
+      legs: fr.legs.map(function (s) { return [s[0].slice(), s[1].slice()]; }),
+      crossbar: [fr.crossbar[0].slice(), fr.crossbar[1].slice()],
+      cornerR: fr.cornerBlocks ? fr.cornerBlocks.radius : fr.tubeRadius,
+      corners: fr.cornerBlocks ? fr.cornerBlocks.segments.map(function (s) { return [s[0].slice(), s[1].slice()]; }) : [],
+      frameRaw: fr
+    };
+    // roof segment (right half, in (q = |w|, B = b - b0)): (W2, SH) -> (0, HT)
+    G.RX = -G.W2; G.RY = G.HT - G.SH; G.RL2 = G.RX * G.RX + G.RY * G.RY;
+    G.roofK = (G.HT - G.SH) / G.W2;
+    // pentagon area centroid (B above base)
+    var aRect = 2 * G.W2 * G.SH, aTri = 0.5 * 2 * G.W2 * (G.HT - G.SH);
+    G.centroidB = (aRect * G.SH / 2 + aTri * (G.SH + (G.HT - G.SH) / 3)) / (aRect + aTri);
+    // derived mouth numbers
+    G.lipZ = G.pz + G.aOut * G.sa + G.b0 * G.ca;
+    G.lipU = G.aOut * G.ca - G.b0 * G.sa;
+    G.topZ = G.pz + G.aOut * G.sa + (G.b0 + G.HT) * G.ca;
+    G.topU = G.aOut * G.ca - (G.b0 + G.HT) * G.sa;
+    S.G = G;
+    S.data = data;
+    S.shooterData = data.shooter;
+    var m = data.shooter.model || {};
+    S.model = {
+      etaSingle: num(m.etaSingle, 0.45), etaDual: num(m.etaDual, 0.9), lossFactor: num(m.lossFactor, 2.0),
+      sm: m.sigmaMotor || { h1: 0.8, h2: 0.95, s0: 0.005, s1: 0.03, s2: 0.06 },
+      downgrade: num(m.downgradeHeadroom, 0.92),
+      thPossible: m.thresholds ? num(m.thresholds.possible, 0.8) : 0.8,
+      thMid: m.thresholds ? num(m.thresholds.notConsistent, 0.4) : 0.4,
+      freeSpeedFactor: num(m.freeSpeedFactor, 1.0),
+      ratedV: num(m.ratedV, 12),
+      batteryV: num(m.batteryV, 12),
+      openLoopSwingV: num(m.openLoopSwingV, 1.2)
+    };
+    var ae = data.shooter.aero || {};
+    S.aero = {
+      rho: num(ae.rho, AERO_DEFAULT.rho), g: num(ae.g, AERO_DEFAULT.g), cd: num(ae.cd, AERO_DEFAULT.cd),
+      clSlope: num(ae.clSlope, AERO_DEFAULT.clSlope), clSMax: num(ae.clSMax, AERO_DEFAULT.clSMax)
+    };
+    S.balls = {};
+    Object.keys(BALLS_DEFAULT).forEach(function (k) {
+      var o = (data.shooter.balls && data.shooter.balls[k]) || {};
+      var d = BALLS_DEFAULT[k];
+      S.balls[k] = { id: k, label: o.label || d.label, Din: num(o.Din, d.Din), massLb: num(o.massLb, d.massLb), wallIn: num(o.wallIn, d.wallIn) };
+    });
+    S.motors = data.motors.motors.slice();
+    S.motorById = {};
+    S.motors.forEach(function (mo) { S.motorById[mo.id] = mo; });
+    S.tables = {}; S.tableKeys = []; S.obsCache = {}; S.gridCache = []; S.ctxCache = [];
+    // HIVE bounding box: union of every obstacle over all tilt states and both targets
+    var hb = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    [-1, 1].forEach(function (sr) {
+      [-1, 1].forEach(function (sb) {
+        var ob = obstaclesFor({ red: sr, blue: sb }, 'red');
+        for (var i = 0; i < ob.list.length; i++) {
+          var bx = ob.list[i].box;
+          for (var j = 0; j < 3; j++) { if (bx[j] < hb[j]) hb[j] = bx[j]; if (bx[j + 3] > hb[j + 3]) hb[j + 3] = bx[j + 3]; }
+        }
+      });
+    });
+    G.hiveBox = hb;
+    // HIVE swing footprint (robot warning): x within any CELL width, |y| within the farthest CELL reach
+    var maxU = 0;
+    [[G.aIn, G.aOut], [-G.aOut, -G.aIn]].forEach(function (ab) {
+      penta().forEach(function (wb) {
+        [ab[0], ab[1]].forEach(function (a) {
+          var u = Math.abs(a * G.ca - wb[1] * G.sa);
+          if (u > maxU) maxU = u;
+        });
+      });
+    });
+    G.swingMaxU = maxU;
+    S.ready = true;
+    return { ok: true, motors: S.motors.length };
+  }
+
+  function need() { if (!S.ready) throw new Error('ShotEngine.init(data) has not been called'); }
+
+  // ------------------------------------------------------------------ balls
+  function ballProps(ballId) {
+    need();
+    var b = S.balls[ballId];
+    if (!b) throw new Error('unknown ball ' + ballId);
+    var R = b.Din / 2 * IN_M, Ri = R - b.wallIn * IN_M, m = b.massLb * LB_KG;
+    var I = 0.4 * m * (Math.pow(R, 5) - Math.pow(Ri, 5)) / (Math.pow(R, 3) - Math.pow(Ri, 3));
+    return { id: b.id, label: b.label, Din: b.Din, rIn: b.Din / 2, massKg: m, I: I, areaM2: Math.PI * R * R };
+  }
+
+  function terminalSpeed(ballId) {
+    var bp = ballProps(ballId), A = S.aero;
+    return Math.sqrt(2 * bp.massKg * A.g / (A.rho * A.cd * bp.areaM2));
+  }
+
+  // ------------------------------------------------------------------ HIVE geometry
+  function penta() {
+    var G = S.G;
+    return [[-G.W2, G.b0], [G.W2, G.b0], [G.W2, G.b0 + G.SH], [0, G.b0 + G.HT], [-G.W2, G.b0 + G.SH]];
+  }
+
+  // world (x,y,z) -> body (w,a,b) for a HIVE centred at hx with up side sigma
+  function worldToBody(x, y, z, hx, sigma) {
+    var G = S.G, u = sigma * y, dz = z - G.pz;
+    return [x - hx, u * G.ca + dz * G.sa, -u * G.sa + dz * G.ca];
+  }
+  function bodyToWorld(w, a, b, hx, sigma) {
+    var G = S.G, u = a * G.ca - b * G.sa;
+    return [hx + w, sigma * u, G.pz + a * G.sa + b * G.ca];
+  }
+
+  // squared distance from (q = |w|, B = b - b0) to the pentagon boundary
+  function dEdge2qb(q, B) {
+    var G = S.G, W2 = G.W2, SH = G.SH;
+    var dx = q > W2 ? q - W2 : 0;
+    var d = dx * dx + B * B;
+    var ex = q - W2, ey = B < 0 ? -B : (B > SH ? B - SH : 0);
+    var d2 = ex * ex + ey * ey;
+    if (d2 < d) d = d2;
+    var px = q - W2, py = B - SH;
+    var t = (px * G.RX + py * G.RY) / G.RL2;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    var fx = px - t * G.RX, fy = py - t * G.RY;
+    d2 = fx * fx + fy * fy;
+    return d2 < d ? d2 : d;
+  }
+  function insideqb(q, B) {
+    var G = S.G;
+    return B >= 0 && q <= G.W2 && B <= G.HT - G.roofK * q;
+  }
+  // public (w, b) versions
+  function dEdge(w, b) { return Math.sqrt(dEdge2qb(Math.abs(w), b - S.G.b0)); }
+  function dPoly(w, b) { var q = Math.abs(w), B = b - S.G.b0; return insideqb(q, B) ? 0 : Math.sqrt(dEdge2qb(q, B)); }
+  function insidePentagon(w, b) { return insideqb(Math.abs(w), b - S.G.b0); }
+  function dInt(a, lo, hi) { return a < lo ? lo - a : (a > hi ? a - hi : 0); }
+  function prismDist(w, a, b, aMin, aMax) { return Math.hypot(dPoly(w, b), dInt(a, aMin, aMax)); }
+  function shellDist(w, a, b) {
+    var G = S.G, f = a - G.aOut;
+    if (f > 0) return Math.hypot(dEdge(w, b), f);
+    if (f >= -G.depth) return insidePentagon(w, b) ? dEdge(w, b) : dPoly(w, b);
+    return Math.hypot(dPoly(w, b), f + G.depth);
+  }
+  function capsuleDist(p, s0, s1, R) {
+    return Math.sqrt(segDist2(p[0], p[1], p[2], s0[0], s0[1], s0[2], s1[0], s1[1], s1[2])) - R;
+  }
+
+  function normState(hs) {
+    var G = S.G;
+    hs = hs || {};
+    return { red: hs.red === 1 || hs.red === -1 ? hs.red : G.upStart.red, blue: hs.blue === 1 || hs.blue === -1 ? hs.blue : G.upStart.blue };
+  }
+
+  function mouthCentroid(alliance, sigma) {
+    var G = S.G;
+    return bodyToWorld(0, G.aOut, G.b0 + G.centroidB, G.hx[alliance], sigma);
+  }
+
+  function cellWorld(hx, sigma, up) {
+    var G = S.G, P = penta();
+    var aClosed = up ? G.aIn : -G.aIn, aOpen = up ? G.aOut : -G.aOut;
+    var verts = [], mouth = [];
+    P.forEach(function (wb) { verts.push(bodyToWorld(wb[0], aClosed, wb[1], hx, sigma)); });
+    P.forEach(function (wb) { var p = bodyToWorld(wb[0], aOpen, wb[1], hx, sigma); verts.push(p); mouth.push(p); });
+    return { role: up ? 'up' : 'down', vertices: verts, mouth: mouth };
+  }
+
+  function hiveModel(hiveState) {
+    need();
+    var G = S.G, hs = normState(hiveState);
+    var hives = ['red', 'blue'].map(function (al) {
+      var sg = hs[al], hx = G.hx[al];
+      return {
+        alliance: al, hx: hx, sigma: sg,
+        cells: [cellWorld(hx, sg, true), cellWorld(hx, sg, false)],
+        armBar: G.armAB.map(function (ab) { return bodyToWorld(0, ab[0], ab[1], hx, sg); }),
+        armRadius: G.armR
+      };
+    });
+    var fr = G.frameRaw;
+    function cp(o) { return JSON.parse(JSON.stringify(o)); }
+    return {
+      hives: hives,
+      frame: {
+        legs: cp(fr.legs), crossbar: cp(fr.crossbar),
+        cornerBlocks: fr.cornerBlocks ? cp(fr.cornerBlocks) : null,
+        footBars: fr.footBars ? cp(fr.footBars) : null,
+        logoPanels: fr.logoPanels ? cp(fr.logoPanels) : null,
+        tubeRadius: fr.tubeRadius
+      },
+      mouthCentroid: { red: mouthCentroid('red', hs.red), blue: mouthCentroid('blue', hs.blue) },
+      lipZ: G.lipZ, topZ: G.topZ
+    };
+  }
+
+  // ------------------------------------------------------------------ obstacles
+  function boxOfPoints(pts, R) {
+    var b = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+    pts.forEach(function (p) {
+      for (var j = 0; j < 3; j++) { if (p[j] - R < b[j]) b[j] = p[j] - R; if (p[j] + R > b[j + 3]) b[j + 3] = p[j] + R; }
+    });
+    return b;
+  }
+
+  // Obstacle list for a tilt state and target alliance. Index 0 is always the target up-CELL shell.
+  function obstaclesFor(hiveState, target) {
+    var G = S.G, hs = normState(hiveState);
+    var key = hs.red + '|' + hs.blue + '|' + target;
+    if (S.obsCache[key]) return S.obsCache[key];
+    var list = [];
+    var tIdx = target === 'blue' ? 1 : 0;
+    var hives = [{ al: 'red', hx: G.hx.red, sg: hs.red }, { al: 'blue', hx: G.hx.blue, sg: hs.blue }];
+    var T = hives[tIdx], O = hives[1 - tIdx];
+    list.push({ kind: K_SHELL, hive: tIdx, hx: T.hx, sg: T.sg, aMin: G.aIn, aMax: G.aOut, cause: C_ROOF,
+      box: boxOfPoints(cellWorld(T.hx, T.sg, true).vertices, 0), name: 'target up-CELL' });
+    list.push({ kind: K_PRISM, hive: tIdx, hx: T.hx, sg: T.sg, aMin: -G.aOut, aMax: -G.aIn, cause: C_CELL,
+      box: boxOfPoints(cellWorld(T.hx, T.sg, false).vertices, 0), name: 'target down-CELL' });
+    list.push({ kind: K_PRISM, hive: 1 - tIdx, hx: O.hx, sg: O.sg, aMin: G.aIn, aMax: G.aOut, cause: C_CELL,
+      box: boxOfPoints(cellWorld(O.hx, O.sg, true).vertices, 0), name: 'other up-CELL' });
+    list.push({ kind: K_PRISM, hive: 1 - tIdx, hx: O.hx, sg: O.sg, aMin: -G.aOut, aMax: -G.aIn, cause: C_CELL,
+      box: boxOfPoints(cellWorld(O.hx, O.sg, false).vertices, 0), name: 'other down-CELL' });
+    [T, O].forEach(function (h, i) {
+      var pts = G.armAB.map(function (ab) { return bodyToWorld(0, ab[0], ab[1], h.hx, h.sg); });
+      list.push({ kind: K_ARM, hive: i === 0 ? tIdx : 1 - tIdx, hx: h.hx, sg: h.sg, R: G.armR, cause: C_FRAME,
+        box: boxOfPoints(pts, G.armR), name: 'arm bar' });
+    });
+    function capsule(s, R, name) {
+      list.push({ kind: K_CAPSULE, p0: s[0], p1: s[1], R: R, cause: C_FRAME, box: boxOfPoints([s[0], s[1]], R), name: name });
+    }
+    G.legs.forEach(function (s) { capsule(s, G.tubeR, 'frame leg'); });
+    capsule(G.crossbar, G.tubeR, 'crossbar');
+    G.corners.forEach(function (s) { capsule(s, G.cornerR, 'corner block'); });
+    var res = { key: key, list: list, hs: hs, target: target, T: T, O: O };
+    S.obsCache[key] = res;
+    return res;
+  }
+
+  // ------------------------------------------------------------------ ball flight (SPEC 4)
+  function aeroK(bp, opts) {
+    var A = S.aero;
+    opts = opts || {};
+    var rho = num(opts.rho, A.rho), cd = num(opts.cd, A.cd), cls = num(opts.clSlope, A.clSlope);
+    return {
+      kd: 0.5 * rho * cd * bp.areaM2 / bp.massKg,
+      kl0: 0.5 * rho * bp.areaM2 / bp.massKg * cls,
+      smax: num(opts.clSMax, A.clSMax),
+      g: num(opts.g, A.g)
+    };
+  }
+
+  /**
+   * Integrate one shot in its vertical plane (RK4, dt 2.5 ms), storing (rho, z) in integer millimetres
+   * every 5 ms relative to the shooter exit. info <- [n, apexIdx, monoIdx, preMaxRho].
+   *   apexIdx  = last index of the highest stored z (samples after it are "descending")
+   *   monoIdx  = first index from which rho never decreases again (backspin can pull steep lobs back)
+   *   preMaxRho = max rho over [0, monoIdx]
+   * lim = {tMax, rhoMax, zStop} (truncation, SPEC 4); defaults are the table limits.
+   */
+  function fly(K, S0, thetaDeg, v0, buf, info, lim) {
+    var th = thetaDeg * DEG;
+    var x = 0, z = 0, vx = v0 * Math.cos(th), vz = v0 * Math.sin(th);
+    var wr = S0 * v0;
+    var kd = K.kd, kl0 = K.kl0, smax = K.smax, g = K.g;
+    var dt = TBL.dt, h2 = dt / 2, h6 = dt / 6;
+    var tMax = lim && lim.tMax != null ? lim.tMax : TBL.tMax;
+    var rhoMax = lim && lim.rhoMax != null ? lim.rhoMax : TBL.rhoMax;
+    var zStop = lim && lim.zStop != null ? lim.zStop : TBL.zStopDesc;
+    var maxN = (buf.length >> 1);
+    var nStepsMax = Math.round(tMax / dt);
+    buf[0] = 0; buf[1] = 0;
+    var n = 1, apexIdx = 0, apexZ = 0, step = 0;
+    var V, Sr, kl, a1x, a1z, a2x, a2z, a3x, a3z, a4x, a4z, vx2, vz2, vx3, vz3, vx4, vz4;
+    for (;;) {
+      V = Math.sqrt(vx * vx + vz * vz); Sr = V > 1e-9 ? wr / V : 0; if (Sr > smax) Sr = smax; kl = kl0 * Sr;
+      a1x = -kd * V * vx - kl * V * vz; a1z = -g - kd * V * vz + kl * V * vx;
+      vx2 = vx + h2 * a1x; vz2 = vz + h2 * a1z;
+      V = Math.sqrt(vx2 * vx2 + vz2 * vz2); Sr = V > 1e-9 ? wr / V : 0; if (Sr > smax) Sr = smax; kl = kl0 * Sr;
+      a2x = -kd * V * vx2 - kl * V * vz2; a2z = -g - kd * V * vz2 + kl * V * vx2;
+      vx3 = vx + h2 * a2x; vz3 = vz + h2 * a2z;
+      V = Math.sqrt(vx3 * vx3 + vz3 * vz3); Sr = V > 1e-9 ? wr / V : 0; if (Sr > smax) Sr = smax; kl = kl0 * Sr;
+      a3x = -kd * V * vx3 - kl * V * vz3; a3z = -g - kd * V * vz3 + kl * V * vx3;
+      vx4 = vx + dt * a3x; vz4 = vz + dt * a3z;
+      V = Math.sqrt(vx4 * vx4 + vz4 * vz4); Sr = V > 1e-9 ? wr / V : 0; if (Sr > smax) Sr = smax; kl = kl0 * Sr;
+      a4x = -kd * V * vx4 - kl * V * vz4; a4z = -g - kd * V * vz4 + kl * V * vx4;
+      x += h6 * (vx + 2 * vx2 + 2 * vx3 + vx4);
+      z += h6 * (vz + 2 * vz2 + 2 * vz3 + vz4);
+      vx += h6 * (a1x + 2 * a2x + 2 * a3x + a4x);
+      vz += h6 * (a1z + 2 * a2z + 2 * a3z + a4z);
+      step++;
+      if ((step & 1) === 0) {
+        var zm = Math.round(z * 1000), xm = Math.round(x * 1000);
+        if (zm > 32767) zm = 32767; else if (zm < -32768) zm = -32768;
+        if (xm > 32767) xm = 32767; else if (xm < -32768) xm = -32768;
+        buf[2 * n] = xm; buf[2 * n + 1] = zm;
+        if (zm >= apexZ) { apexZ = zm; apexIdx = n; }
+        n++;
+        if ((vz < 0 && z < zStop) || step >= nStepsMax || x > rhoMax || n >= maxN) break;
+      }
+    }
+    var m = n - 1;
+    while (m > 0 && buf[2 * (m - 1)] <= buf[2 * m]) m--;
+    var pm = -32768;
+    for (var i = 0; i <= m; i++) if (buf[2 * i] > pm) pm = buf[2 * i];
+    info[0] = n; info[1] = apexIdx; info[2] = m; info[3] = pm;
+    return n;
+  }
+
+  // float path for tests/drawing without quantisation (same integrator maths), SI units
+  function flyFloat(ballId, S0, thetaDeg, v0, opts) {
+    need();
+    opts = opts || {};
+    var bp = ballProps(ballId), K = aeroK(bp, opts);
+    var dt = num(opts.dt, TBL.dt), tEnd = num(opts.tEnd, 1.0);
+    var th = thetaDeg * DEG, x = 0, z = 0, vx = v0 * Math.cos(th), vz = v0 * Math.sin(th), wr = S0 * v0;
+    function acc(ux, uz) {
+      var V = Math.sqrt(ux * ux + uz * uz), Sr = V > 1e-9 ? wr / V : 0; if (Sr > K.smax) Sr = K.smax;
+      var kl = K.kl0 * Sr;
+      return [-K.kd * V * ux - kl * V * uz, -K.g - K.kd * V * uz + kl * V * ux];
+    }
+    var steps = Math.round(tEnd / dt), out = [[0, 0, vx, vz]];
+    for (var s = 0; s < steps; s++) {
+      var a1 = acc(vx, vz);
+      var b2x = vx + dt / 2 * a1[0], b2z = vz + dt / 2 * a1[1], a2 = acc(b2x, b2z);
+      var b3x = vx + dt / 2 * a2[0], b3z = vz + dt / 2 * a2[1], a3 = acc(b3x, b3z);
+      var b4x = vx + dt * a3[0], b4z = vz + dt * a3[1], a4 = acc(b4x, b4z);
+      x += dt / 6 * (vx + 2 * b2x + 2 * b3x + b4x);
+      z += dt / 6 * (vz + 2 * b2z + 2 * b3z + b4z);
+      vx += dt / 6 * (a1[0] + 2 * a2[0] + 2 * a3[0] + a4[0]);
+      vz += dt / 6 * (a1[1] + 2 * a2[1] + 2 * a3[1] + a4[1]);
+      out.push([x, z, vx, vz]);
+    }
+    return out;
+  }
+
+  // ------------------------------------------------------------------ trajectory table
+  function tableSpeeds() {
+    var v = [];
+    for (var j = 0; ; j++) {
+      var s = TBL.v0 * Math.pow(TBL.vRatio, j);
+      if (s > TBL.vMax + 1e-9) break;
+      v.push(s);
+    }
+    return v;
+  }
+
+  function buildTable(ballId, S0) {
+    need();
+    S0 = num(+S0, 1);
+    var key = ballId + '|' + S0.toFixed(4);
+    if (S.tables[key]) { S.tables[key].hits = (S.tables[key].hits || 0) + 1; return S.tables[key]; }
+    var t0 = now();
+    var bp = ballProps(ballId), K = aeroK(bp);
+    var th = [];
+    for (var a = TBL.th0; a <= TBL.th1; a++) th.push(a);
+    var sp = tableSpeeds();
+    var nT = th.length, nV = sp.length, N = nT * nV;
+    var trajs = new Array(N), lens = new Int32Array(N), apex = new Int32Array(N), mono = new Int32Array(N), preMax = new Int32Array(N);
+    var buf = new Int16Array(2 * MAX_SAMPLES), info = new Int32Array(4);
+    var samples = 0;
+    for (var i = 0; i < nT; i++) {
+      for (var j = 0; j < nV; j++) {
+        var idx = i * nV + j;
+        fly(K, S0, th[i], sp[j], buf, info);
+        trajs[idx] = buf.slice(0, 2 * info[0]);
+        lens[idx] = info[0]; apex[idx] = info[1]; mono[idx] = info[2]; preMax[idx] = info[3];
+        samples += info[0];
+      }
+    }
+    var tbl = {
+      key: key, ballId: ballId, S0: S0, rIn: bp.rIn, K: K,
+      thetas: Float64Array.from(th), speeds: Float64Array.from(sp), thStep: 1, lnStep: Math.log(TBL.vRatio),
+      nT: nT, nV: nV, trajs: trajs, lens: lens, apex: apex, mono: mono, preMax: preMax,
+      samples: samples, bytes: samples * 4, buildMs: 0, hits: 0
+    };
+    tbl.buildMs = now() - t0;
+    S.tables[key] = tbl;
+    S.tableKeys.push(key);
+    while (S.tableKeys.length > 4) delete S.tables[S.tableKeys.shift()];
+    return tbl;
+  }
+
+  // ------------------------------------------------------------------ params
+  function presetInertia(id) {
+    var ps = (S.shooterData.inertiaPresets || []);
+    for (var i = 0; i < ps.length; i++) if (ps[i].id === id) return ps[i].inertiaKgM2;
+    return null;
+  }
+
+  function shooterNorm(sh) {
+    need();
+    sh = sh || {};
+    var def = S.shooterData.defaults || {};
+    var wheelD = 96;
+    (S.shooterData.wheels || []).forEach(function (w) { if (w.id === def.wheelId) wheelD = w.diameterMm; });
+    var I = num(sh.inertiaKgM2, NaN);
+    if (!isFinite(I) || I <= 0) I = presetInertia(sh.inertiaPreset) || presetInertia(def.inertiaPreset) || 4e-4;
+    return {
+      type: sh.type === 'dual' ? 'dual' : 'single',
+      wheelDiameterMm: Math.max(10, num(sh.wheelDiameterMm, wheelD)),
+      motorsPerWheel: Math.max(1, Math.round(num(sh.motorsPerWheel, num(def.motorsPerWheel, 1)))),
+      gear: Math.max(0.05, num(sh.gear, num(def.gear, 1))),
+      topRatio: clamp(num(sh.topRatio, num(def.topRatio, 0.6)), 0, 1),
+      inertiaKgM2: I,
+      shotInterval: clamp(num(sh.shotInterval, num(def.shotInterval, 0.5)), 0.01, 60),
+      etaSingle: clamp(num(sh.etaSingle, S.model.etaSingle), 0.01, 1),
+      etaDual: clamp(num(sh.etaDual, S.model.etaDual), 0.01, 1.5),
+      batteryV: clamp(num(sh.batteryV, S.model.batteryV), 9, 15),
+      control: sh.control === 'power' ? 'power' : 'pid'
+    };
+  }
+
+  function shooterSpin(shooter) {
+    var sh = shooterNorm(shooter);
+    if (sh.type === 'dual') return (1 - sh.topRatio) / (1 + sh.topRatio);
+    return 1;
+  }
+
+  function defaultMotorId() {
+    var def = S.shooterData.defaults || {};
+    for (var i = 0; i < S.motors.length; i++) if (S.motors[i].freeRpm === def.motorFreeRpm) return S.motors[i].id;
+    return S.motors[0].id;
+  }
+
+  function normParams(params) {
+    need();
+    params = params || {};
+    var G = S.G, sd = S.shooterData, def = sd.defaults || {};
+    var ballId = params.ballId === 'nectar' ? 'nectar' : 'pollen';
+    var target = params.target === 'blue' ? 'blue' : 'red';
+    var hs = normState(params.hiveState);
+    var rob = params.robot || {};
+    var rx = num(rob.x, G.hx.red), ry = num(rob.y, -48);
+    var L = G.robotLimit;
+    var x = clamp(rx, -L, L), y = clamp(ry, -L, L);
+    var prDef = (sd.precision && sd.precision[def.precision || 'typical']) || { sigThetaDeg: 1, sigYawDeg: 1, sigShooter: 0.015 };
+    var pr = params.precision || {};
+    return {
+      ballId: ballId, target: target, hiveState: hs,
+      robot: { x: x, y: y }, robotIn: { x: rx, y: ry }, clamped: (x !== rx || y !== ry),
+      h0: clamp(num(params.h0, num(def.h0, 16)), 4, 29),
+      precision: {
+        sigThetaDeg: Math.max(1e-3, num(pr.sigThetaDeg, prDef.sigThetaDeg)),
+        sigYawDeg: Math.max(1e-3, num(pr.sigYawDeg, prDef.sigYawDeg)),
+        sigShooter: Math.max(0, num(pr.sigShooter, prDef.sigShooter))
+      },
+      motorId: S.motorById[params.motorId] ? params.motorId : defaultMotorId(),
+      shooter: shooterNorm(params.shooter)
+    };
+  }
+
+  // ------------------------------------------------------------------ motor + flywheel (SPEC 6, 10)
+  function sigmaMotorOf(h) {
+    var sm = S.model.sm;
+    if (!(h > sm.h1)) return sm.s0;
+    if (h <= sm.h2) return sm.s0 + (sm.s1 - sm.s0) * (h - sm.h1) / (sm.h2 - sm.h1);
+    if (h <= 1) return sm.s1 + (sm.s2 - sm.s1) * (h - sm.h2) / (1 - sm.h2);
+    return sm.s2;
+  }
+
+  // exit speed per unit bottom-wheel surface speed
+  function exitFactor(sh) {
+    return sh.type === 'dual' ? sh.etaDual * (1 + sh.topRatio) / 2 : sh.etaSingle;
+  }
+
+  function motorCore(mo, sh, bp, vExit) {
+    var M = S.model;
+    var fx = exitFactor(sh);
+    var D = sh.wheelDiameterMm / 1000;
+    var vf = sh.batteryV / M.ratedV;                          // DC motor: free speed and stall torque scale with voltage
+    var free = mo.freeRpm * M.freeSpeedFactor * vf;           // highest motor rpm this battery can reach, PID or not
+    var vWheel = vExit / fx;
+    var nW = vWheel / (Math.PI * D) * 60;
+    var nM = nW / sh.gear;
+    var h = nM / free;
+    var vCap = fx * (free * sh.gear) * Math.PI * D / 60;
+    var S0 = sh.type === 'dual' ? (1 - sh.topRatio) / (1 + sh.topRatio) : 1;
+    var I = sh.inertiaKgM2;
+    var w0 = nW * 2 * Math.PI / 60;
+    var wwf = free * sh.gear * 2 * Math.PI / 60;
+    var Tstall = mo.stallTorqueNm * vf;
+    var Tws = sh.motorsPerWheel * Tstall / sh.gear;
+    var tau = I * wwf / Tws;
+    var share = sh.type === 'dual' ? 1 / (1 + sh.topRatio) : 1;
+    var rM = bp.rIn * IN_M;
+    var spinW = S0 * vExit / rM;
+    var keLin = 0.5 * bp.massKg * vExit * vExit, keRot = 0.5 * bp.I * spinW * spinW;
+    var E = M.lossFactor * (keLin + keRot) * share;
+    var w1 = Math.sqrt(Math.max(0, w0 * w0 - 2 * E / I));
+    var dip = w0 > 0 ? 1 - w1 / w0 : 0;
+    var dt = sh.shotInterval, rec, wdt, residual, spin, sigM;
+    if (sh.control === 'pid') {
+      // PID drives the motor at full battery voltage until it is back at the setpoint
+      rec = w0 < wwf ? tau * Math.log((wwf - w1) / (wwf - w0)) : Infinity;
+      wdt = Math.min(w0, wwf - (wwf - w1) * Math.exp(-dt / tau));
+      residual = w0 > 0 ? Math.max(0, 1 - wdt / w0) : 0;
+      spin = w0 < wwf ? tau * Math.log(wwf / (wwf - w0)) : Infinity;
+      sigM = sigmaMotorOf(h);
+    } else {
+      // fixed power: the motor creeps back toward the speed that power level gives (same time constant, no boost)
+      rec = dip > 0.01 ? tau * Math.log(dip / 0.01) : 0;       // back to within 1 %
+      residual = dip * Math.exp(-dt / tau);
+      wdt = w0 * (1 - residual);
+      spin = h <= 1 ? tau * Math.log(100) : Infinity;          // to within 1 %
+      sigM = h <= 1 ? (M.openLoopSwingV / sh.batteryV) / Math.sqrt(12) : M.sm.s2;
+    }
+    return {
+      motorId: mo.id, label: mo.label, freeRpm: mo.freeRpm, usableFreeRpm: free,
+      vExit: vExit, wheelRpm: nW, motorRpm: nM, headroom: h, reachable: h <= 1, vCap: vCap, S0: S0,
+      dip: dip, recoveryMs: rec * 1000, spinUpMs: spin * 1000, residual: residual,
+      sigmaMotor: sigM, sigmaRecovery: residual / 2, tauS: tau, shotEnergyJ: E, control: sh.control, batteryV: sh.batteryV,
+      details: {
+        exitFactor: fx, wheelDiameterM: D, vWheel: vWheel, voltageFactor: vf, freeSpeedFactor: M.freeSpeedFactor,
+        stallTorqueNm: Tstall, stallTorqueListedNm: mo.stallTorqueNm, wheelStallTorqueNm: Tws, inertiaKgM2: I,
+        w0: w0, wFree: wwf, w1: w1, wAfterInterval: wdt, keLinJ: keLin, keRotJ: keRot, lossFactor: M.lossFactor, share: share,
+        spinRadS: spinW, shotInterval: dt, motorsPerWheel: sh.motorsPerWheel, gear: sh.gear, topRatio: sh.topRatio, type: sh.type,
+        etaSingle: sh.etaSingle, etaDual: sh.etaDual, openLoopSwingV: M.openLoopSwingV, sigmaRule: M.sm
+      }
+    };
+  }
+
+  function motorModel(motorId, shooter, ballId, vExit) {
+    need();
+    var mo = S.motorById[motorId];
+    if (!mo) throw new Error('unknown motor ' + motorId);
+    return motorCore(mo, shooterNorm(shooter), ballProps(ballId === 'nectar' ? 'nectar' : 'pollen'), vExit);
+  }
+
+  function sigmaVOf(mc, sigShooter) {
+    return Math.sqrt(sigShooter * sigShooter + mc.sigmaMotor * mc.sigmaMotor + mc.sigmaRecovery * mc.sigmaRecovery);
+  }
+
+  // ------------------------------------------------------------------ hit-test context
+  function makeCtx(p, rIn) {
+    var G = S.G, ob = obstaclesFor(p.hiveState, p.target), list = ob.list, nO = list.length, r = rIn;
+    var ebox = new Float64Array(6 * nO), rr2 = new Float64Array(nO);
+    for (var i = 0; i < nO; i++) {
+      var b = list[i].box;
+      ebox[6 * i] = b[0] - r; ebox[6 * i + 1] = b[1] - r; ebox[6 * i + 2] = b[2] - r;
+      ebox[6 * i + 3] = b[3] + r; ebox[6 * i + 4] = b[4] + r; ebox[6 * i + 5] = b[5] + r;
+      var R = list[i].R || 0;
+      rr2[i] = (R + r) * (R + r);
+    }
+    var hb = G.hiveBox;
+    var T = ob.T;
+    var cen = mouthCentroid(p.target, T.sg);
+    var x0 = p.robot.x, y0 = p.robot.y;
+    var mouth = cellWorld(T.hx, T.sg, true).mouth;
+    // horizontal distance range from the robot to the mouth pentagon (projected, convex)
+    var dmax = 0, dmin = Infinity, inside = true, sgn = 0;
+    for (var k = 0; k < 5; k++) {
+      var P0 = mouth[k], P1 = mouth[(k + 1) % 5];
+      var dv = Math.hypot(P0[0] - x0, P0[1] - y0);
+      if (dv > dmax) dmax = dv;
+      var d2 = seg2Dist2(x0, y0, P0[0], P0[1], P1[0], P1[1]);
+      if (d2 < dmin) dmin = d2;
+      var cr = (P1[0] - P0[0]) * (y0 - P0[1]) - (P1[1] - P0[1]) * (x0 - P0[0]);
+      if (cr !== 0) { var sg = cr > 0 ? 1 : -1; if (sgn === 0) sgn = sg; else if (sg !== sgn) inside = false; }
+    }
+    dmin = inside ? 0 : Math.sqrt(dmin);
+    return {
+      p: p, r: r, r2: r * r, subStep: 0.4 * r,
+      x0: x0, y0: y0, h0: p.h0,
+      obs: list, nO: nO, ebox: ebox, rr2: rr2,
+      hbox: [hb[0] - r, hb[1] - r, hb[2] - r, hb[3] + r, hb[4] + r, hb[5] + r],
+      T: T, O: ob.O,
+      lipLimit: G.lipZ - r,
+      cen: cen,
+      psi0: Math.atan2(cen[1] - y0, cen[0] - x0) / DEG,
+      dist: Math.hypot(cen[0] - x0, cen[1] - y0),
+      dminMM: dmin * MPI - 1, dmaxMM: dmax * MPI + 1,
+      zCantMM: (G.lipZ - r - p.h0) * MPI,
+      zBandLoMM: (G.lipZ - p.h0) * MPI - 1,
+      zBandHiMM: (G.topZ - p.h0) * MPI + 1,
+      zNearLoMM: (cen[2] - 12 - p.h0) * MPI, zNearHiMM: (cen[2] + 12 - p.h0) * MPI,
+      wallIn: G.half - r, wallTopR: G.wallTop + r, leave: G.leave
+    };
+  }
+
+  function exitDist(x0, y0, c, s, L) {
+    var tx = c > 1e-12 ? (L - x0) / c : (c < -1e-12 ? (-L - x0) / c : Infinity);
+    var ty = s > 1e-12 ? (L - y0) / s : (s < -1e-12 ? (-L - y0) / s : Infinity);
+    return tx < ty ? tx : ty;
+  }
+
+  function yawCtx(ctx, psiDeg) {
+    var G = S.G, c = Math.cos(psiDeg * DEG), s = Math.sin(psiDeg * DEG);
+    var x0 = ctx.x0, y0 = ctx.y0, hb = ctx.hbox;
+    var t0 = -Infinity, t1 = Infinity, has = true, ta, tb;
+    if (Math.abs(c) < 1e-12) { if (x0 < hb[0] || x0 > hb[3]) has = false; }
+    else { ta = (hb[0] - x0) / c; tb = (hb[3] - x0) / c; t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb)); }
+    if (Math.abs(s) < 1e-12) { if (y0 < hb[1] || y0 > hb[4]) has = false; }
+    else { ta = (hb[1] - y0) / s; tb = (hb[4] - y0) / s; t0 = Math.max(t0, Math.min(ta, tb)); t1 = Math.min(t1, Math.max(ta, tb)); }
+    if (t1 < t0 || t1 < 0) has = false;
+    var T = ctx.T;
+    return {
+      psi: psiDeg, c: c, s: s, has: has,
+      rin: t0 * MPI, rout: t1 * MPI,
+      rWall: exitDist(x0, y0, c, s, ctx.wallIn) * MPI,
+      rLeave: exitDist(x0, y0, c, s, ctx.leave) * MPI,
+      sMouth: ((ctx.cen[0] - x0) * c + (ctx.cen[1] - y0) * s) * MPI,
+      fA: T.sg * G.ca * s * IPM, fB: G.sa * IPM, fC: T.sg * G.ca * y0 + G.sa * (ctx.h0 - G.pz) - G.aOut
+    };
+  }
+
+  // binary searches over P[2*i + off], i in [lo, hi); return hi when not found
+  function firstGE(P, off, lo, hi, v) { while (lo < hi) { var m = (lo + hi) >> 1; if (P[2 * m + off] >= v) hi = m; else lo = m + 1; } return lo; }
+  function firstGT(P, off, lo, hi, v) { while (lo < hi) { var m = (lo + hi) >> 1; if (P[2 * m + off] > v) hi = m; else lo = m + 1; } return lo; }
+  function firstLE(P, off, lo, hi, v) { while (lo < hi) { var m = (lo + hi) >> 1; if (P[2 * m + off] <= v) hi = m; else lo = m + 1; } return lo; }
+  function firstLT(P, off, lo, hi, v) { while (lo < hi) { var m = (lo + hi) >> 1; if (P[2 * m + off] < v) hi = m; else lo = m + 1; } return lo; }
+
+  // index of the first descending sample below the "can't score any more" height (n if none)
+  function cantIndex(ctx, P, n, apexIdx) {
+    return firstLT(P, 1, apexIdx + 1, n, ctx.zCantMM);
+  }
+
+  // checks at a stored sample outside the HIVE box: floor, walls, left the field, can't score
+  function pointOut(ctx, yc, x, y, z, desc, rho) {
+    if (z < ctx.r) return C_FLOOR;
+    var ax = x < 0 ? -x : x, ay = y < 0 ? -y : y;
+    if ((ax > ctx.wallIn || ay > ctx.wallIn) && z < ctx.wallTopR) return C_WALL;
+    if (ax > ctx.leave || ay > ctx.leave) return C_LONG;
+    if (desc && z < ctx.lipLimit) return rho < yc.sMouth ? C_SHORT : C_LONG;
+    return -1;
+  }
+
+  // full check at a (sub-)sample inside the HIVE box; cand = bitmask of obstacles whose box the segment touches
+  function pointIn(ctx, yc, cand, px, py, pz, desc, rho) {
+    var G = S.G, r2 = ctx.r2, obs = ctx.obs, nO = ctx.nO, rr2 = ctx.rr2;
+    var tInside = false, f = 1, u, dz, a, b, q, B, d2;
+    if (cand & 1) {
+      var T = obs[0];
+      u = T.sg * py; dz = pz - G.pz;
+      a = u * G.ca + dz * G.sa; b = -u * G.sa + dz * G.ca;
+      q = px - T.hx; if (q < 0) q = -q;
+      B = b - G.b0; f = a - G.aOut;
+      var ins = insideqb(q, B);
+      if (f > 0) d2 = dEdge2qb(q, B) + f * f;
+      else if (f >= -G.depth) d2 = dEdge2qb(q, B);
+      else { var gg = f + G.depth; d2 = (ins ? 0 : dEdge2qb(q, B)) + gg * gg; }
+      if (d2 < r2) return B < 1.5 ? C_LIP : C_ROOF;
+      tInside = ins && f < 0 && f >= -G.depth;
+    }
+    for (var i = 1; i < nO; i++) {
+      if (!(cand & (1 << i))) continue;
+      var o = obs[i];
+      if (o.kind === K_PRISM) {
+        u = o.sg * py; dz = pz - G.pz;
+        a = u * G.ca + dz * G.sa; b = -u * G.sa + dz * G.ca;
+        q = px - o.hx; if (q < 0) q = -q;
+        B = b - G.b0;
+        var da = a < o.aMin ? o.aMin - a : (a > o.aMax ? a - o.aMax : 0);
+        d2 = (insideqb(q, B) ? 0 : dEdge2qb(q, B)) + da * da;
+        if (d2 < r2) return C_CELL;
+      } else if (o.kind === K_ARM) {
+        var w = px - o.hx, w2 = w * w;
+        if (w2 >= rr2[i]) continue;
+        u = o.sg * py; dz = pz - G.pz;
+        a = u * G.ca + dz * G.sa; b = -u * G.sa + dz * G.ca;
+        var ab = G.armAB, best = Infinity;
+        for (var j = 0; j + 1 < ab.length; j++) {
+          var s2 = seg2Dist2(a, b, ab[j][0], ab[j][1], ab[j + 1][0], ab[j + 1][1]);
+          if (s2 < best) best = s2;
+        }
+        if (best + w2 < rr2[i]) return C_FRAME;
+      } else {
+        var p0 = o.p0, p1 = o.p1;
+        if (segDist2(px, py, pz, p0[0], p0[1], p0[2], p1[0], p1[1], p1[2]) < rr2[i]) return C_FRAME;
+      }
+    }
+    if (pz < ctx.r) return C_FLOOR;
+    if (tInside && f < -ctx.r) return C_HIT;
+    if (desc && pz < ctx.lipLimit && !tInside) return rho < yc.sMouth ? C_SHORT : C_LONG;
+    return -1;
+  }
+
+  function setOut(out, code, k, t) { if (out) { out.code = code; out.k = k; out.t = t; } return code; }
+
+  /**
+   * SPEC 5 hit test of one stored trajectory at one heading. Returns the cause code (0 = scores) and
+   * fills out.k / out.t (segment index and fraction where the decision was made).
+   * Only the stretch whose heading distance overlaps the HIVE box is sub-sampled; before it nothing can
+   * happen (robot inside the field, ball rising from h0 > r), after it only walls / leaving / can't-score.
+   */
+  function runTest(ctx, yc, P, n, apexIdx, mono, preMax, kz, out) {
+    var kFrom = 1, kTo = 0, k, code;
+    if (yc.has) {
+      if (preMax < yc.rin) kFrom = firstGE(P, 0, mono > 1 ? mono : 1, n, yc.rin);
+      if (kFrom < 1) kFrom = 1;
+      var kE = firstGT(P, 0, kFrom > mono ? kFrom : mono, n, yc.rout);
+      kTo = kE < n - 1 ? kE : n - 1;
+      if (kTo > kz) kTo = kz;
+    }
+    if (kz < kFrom && kz < n) {
+      return setOut(out, P[2 * kz] < yc.sMouth ? C_SHORT : C_LONG, kz, 1);
+    }
+    var x0 = ctx.x0, y0 = ctx.y0, h0 = ctx.h0, c = yc.c * IPM, s = yc.s * IPM;
+    var hb = ctx.hbox, eb = ctx.ebox, nO = ctx.nO, step = ctx.subStep;
+    for (k = kFrom; k <= kTo; k++) {
+      var ra = P[2 * k - 2], za = P[2 * k - 1], rb = P[2 * k], zb = P[2 * k + 1];
+      var xa = x0 + ra * c, ya = y0 + ra * s, zaw = h0 + za * IPM;
+      var xb = x0 + rb * c, yb = y0 + rb * s, zbw = h0 + zb * IPM;
+      var desc = k > apexIdx;
+      var mnx, mxx, mny, mxy, mnz, mxz;
+      if (xa < xb) { mnx = xa; mxx = xb; } else { mnx = xb; mxx = xa; }
+      if (ya < yb) { mny = ya; mxy = yb; } else { mny = yb; mxy = ya; }
+      if (zaw < zbw) { mnz = zaw; mxz = zbw; } else { mnz = zbw; mxz = zaw; }
+      var cand = 0;
+      if (!(mxx < hb[0] || mnx > hb[3] || mxy < hb[1] || mny > hb[4] || mxz < hb[2] || mnz > hb[5])) {
+        for (var i = 0; i < nO; i++) {
+          var o6 = 6 * i;
+          if (mxx < eb[o6] || mnx > eb[o6 + 3] || mxy < eb[o6 + 1] || mny > eb[o6 + 4] || mxz < eb[o6 + 2] || mnz > eb[o6 + 5]) continue;
+          cand |= (1 << i);
+        }
+      }
+      if (cand === 0) {
+        code = pointOut(ctx, yc, xb, yb, zbw, desc, rb);
+        if (code >= 0) return setOut(out, code, k, 1);
+        continue;
+      }
+      var dx = xb - xa, dy = yb - ya, dzz = zbw - zaw;
+      var m = Math.ceil(Math.sqrt(dx * dx + dy * dy + dzz * dzz) / step);
+      if (m < 1) m = 1;
+      for (var j = 1; j <= m; j++) {
+        var t = j / m;
+        code = pointIn(ctx, yc, cand, xa + t * dx, ya + t * dy, zaw + t * dzz, desc, ra + t * (rb - ra));
+        if (code >= 0) return setOut(out, code, k, t);
+      }
+    }
+    // after the HIVE stretch
+    var kS = kTo + 1;
+    if (kS < 1) kS = 1;
+    var mStart = kS > mono ? kS : mono;
+    for (k = kS; k < mStart && k < n; k++) {
+      code = pointOut(ctx, yc, x0 + P[2 * k] * c, y0 + P[2 * k] * s, h0 + P[2 * k + 1] * IPM, k > apexIdx, P[2 * k]);
+      if (code >= 0) return setOut(out, code, k, 1);
+    }
+    if (mStart < n) {
+      var ev = [kz, firstGE(P, 0, mStart, n, yc.rWall), firstGT(P, 0, mStart, n, yc.rLeave)];
+      ev.sort(function (p1, p2) { return p1 - p2; });
+      for (var e = 0; e < 3; e++) {
+        k = ev[e];
+        if (k < mStart || k >= n) continue;
+        code = pointOut(ctx, yc, x0 + P[2 * k] * c, y0 + P[2 * k] * s, h0 + P[2 * k + 1] * IPM, k > apexIdx, P[2 * k]);
+        if (code >= 0) return setOut(out, code, k, 1);
+      }
+    }
+    return setOut(out, P[2 * (n - 1)] < yc.sMouth ? C_SHORT : C_LONG, n - 1, 1);
+  }
+
+  /**
+   * Test one trajectory at every heading of a yaw fan. A heading can only score if the ball centre
+   * crosses the mouth plane inward inside the pentagon with >= 0.5 r clearance (a necessary condition
+   * implied by the SPEC 5 test with <= 0.4 r sub-steps); only those get the full runTest. The others get
+   * a cheap explanatory cause. hits/causes are written at base + y.
+   */
+  var _out = { code: 0, k: 0, t: 0 };
+  function testTraj(ctx, ycs, P, n, apexIdx, mono, preMax, hits, causes, base) {
+    var G = S.G, nY = ycs.length, y;
+    var kz = cantIndex(ctx, P, n, apexIdx);
+    var zLo = ctx.zBandLoMM, zHi = ctx.zBandHiMM;
+    if (P[2 * apexIdx + 1] < zLo) {
+      for (y = 0; y < nY; y++) { hits[base + y] = 0; causes[base + y] = C_SHORT; }
+      return 0;
+    }
+    // segments (k-1 -> k) whose z range overlaps the mouth band, rising and falling runs
+    var a0 = firstGE(P, 1, 1, apexIdx + 1, zLo);
+    var g1 = firstGT(P, 1, 0, apexIdx + 1, zHi);
+    var a1 = g1 < apexIdx ? g1 : apexIdx;
+    var d0 = firstLE(P, 1, apexIdx + 1, n, zHi);
+    var e1 = firstLT(P, 1, apexIdx, n, zLo);
+    var d1 = e1 < n - 1 ? e1 : n - 1;
+    if (a1 > kz) a1 = kz;
+    if (d1 > kz) d1 = kz;
+    var dmin = ctx.dminMM, dmax = ctx.dmaxMM, any = false, firstRho = null, k;
+    for (k = a0; k <= a1 && !any; k++) {
+      var r0 = P[2 * k - 2], r1 = P[2 * k];
+      if (firstRho === null) firstRho = r0;
+      if ((r0 > r1 ? r0 : r1) >= dmin && (r0 < r1 ? r0 : r1) <= dmax) any = true;
+    }
+    for (k = d0; k <= d1 && !any; k++) {
+      var q0 = P[2 * k - 2], q1 = P[2 * k];
+      if (firstRho === null) firstRho = q0;
+      if ((q0 > q1 ? q0 : q1) >= dmin && (q0 < q1 ? q0 : q1) <= dmax) any = true;
+    }
+    if (!any) {
+      var cz = (firstRho === null || firstRho < dmin) ? C_SHORT : C_LONG;
+      for (y = 0; y < nY; y++) { hits[base + y] = 0; causes[base + y] = cz; }
+      return 0;
+    }
+    var nh = 0, x0 = ctx.x0, y0 = ctx.y0, h0 = ctx.h0, T = ctx.T, r2 = ctx.r2;
+    for (y = 0; y < nY; y++) {
+      var yc = ycs[y], fA = yc.fA, fB = yc.fB, fC = yc.fC;
+      var cand = false, cheap = -1, lastF = 0, run, kk, kEnd;
+      for (run = 0; run < 2 && !cand; run++) {
+        kk = run === 0 ? a0 : d0;
+        kEnd = run === 0 ? a1 : d1;
+        if (kk > kEnd) continue;
+        var fp = fA * P[2 * kk - 2] + fB * P[2 * kk - 1] + fC;
+        for (; kk <= kEnd; kk++) {
+          var fk = fA * P[2 * kk] + fB * P[2 * kk + 1] + fC;
+          lastF = fk;
+          if (fp >= 0 && fk < 0) {
+            var t = fp / (fp - fk);
+            var rr = P[2 * kk - 2] + t * (P[2 * kk] - P[2 * kk - 2]);
+            var zz = P[2 * kk - 1] + t * (P[2 * kk + 1] - P[2 * kk - 1]);
+            var px = x0 + rr * IPM * yc.c, py = y0 + rr * IPM * yc.s, pz = h0 + zz * IPM;
+            var u = T.sg * py, dz = pz - G.pz;
+            var bb = -u * G.sa + dz * G.ca, B = bb - G.b0;
+            var q = px - T.hx; if (q < 0) q = -q;
+            var ins = insideqb(q, B), de2 = dEdge2qb(q, B);
+            if (ins && de2 >= 0.25 * r2) { cand = true; break; }
+            if (cheap < 0) {
+              if (de2 < r2) cheap = B < 1.5 ? C_LIP : C_ROOF;
+              else if (B < 0) cheap = C_SHORT;
+              else if (q > G.W2 && B <= G.HT) cheap = de2 < 9 ? C_ROOF : C_LONG;
+              else cheap = C_LONG;
+            }
+          }
+          fp = fk;
+        }
+      }
+      if (cand) {
+        var code = runTest(ctx, yc, P, n, apexIdx, mono, preMax, kz, _out);
+        hits[base + y] = code === C_HIT ? 1 : 0;
+        causes[base + y] = code;
+        if (code === C_HIT) nh++;
+      } else {
+        hits[base + y] = 0;
+        causes[base + y] = cheap >= 0 ? cheap : (lastF > 0 ? C_SHORT : C_LONG);
+      }
+    }
+    return nh;
+  }
+
+  // ------------------------------------------------------------------ coarse grid (SPEC 7.1)
+  function coarseYaws(ctx) {
+    var d = Math.atan2(14, ctx.dist) / DEG / 8;
+    var dPsi = Math.max(0.5, d), ys = [];
+    for (var k = -8; k <= 8; k++) ys.push(ctx.psi0 + k * dPsi);
+    return { dPsi: dPsi, yaws: ys };
+  }
+
+  function gridKey(p, S0) {
+    return [p.ballId, S0.toFixed(4), p.target, p.hiveState.red, p.hiveState.blue,
+      p.robot.x.toFixed(3), p.robot.y.toFixed(3), p.h0.toFixed(3)].join('|');
+  }
+
+  function getGrid(p, table) {
+    var key = gridKey(p, table.S0);
+    for (var i = 0; i < S.gridCache.length; i++) if (S.gridCache[i].key === key) return S.gridCache[i];
+    var t0 = now();
+    var ctx = makeCtx(p, table.rIn);
+    var fan = coarseYaws(ctx);
+    var ycs = fan.yaws.map(function (psi) { return yawCtx(ctx, psi); });
+    var nT = table.nT, nV = table.nV, nY = ycs.length, N = nT * nV;
+    var hits = new Uint8Array(N * nY), causes = new Uint8Array(N * nY);
+    var nHits = 0, minHitJ = nV;
+    for (var idx = 0; idx < N; idx++) {
+      var nh = testTraj(ctx, ycs, table.trajs[idx], table.lens[idx], table.apex[idx], table.mono[idx], table.preMax[idx], hits, causes, idx * nY);
+      if (nh > 0) { nHits += nh; var j = idx % nV; if (j < minHitJ) minHitJ = j; }
+    }
+    var grid = {
+      key: key, table: table, ctx: ctx, ycs: ycs, yaws: fan.yaws, dPsi: fan.dPsi,
+      nA: nT, nB: nV, nC: nY, hits: hits, causes: causes, nHits: nHits,
+      minHitV: minHitJ < nV ? table.speeds[minHitJ] : null,
+      ms: 0
+    };
+    grid.ms = now() - t0;
+    S.gridCache.unshift(grid);
+    while (S.gridCache.length > 3) S.gridCache.pop();
+    return grid;
+  }
+
+  // ------------------------------------------------------------------ hit rate (SPEC 7.4)
+  var _pool = {};
+  function pool(name, size) {
+    var b = _pool[name];
+    if (!b || b.length < size) { b = new Float32Array(size); _pool[name] = b; }
+    return b;
+  }
+
+  // per-axis cell masses for an aim at offset d cells (cells span half a step either side)
+  function kernel(step, sigma) {
+    if (!(sigma > 0)) sigma = 1e-9;
+    var h = Math.ceil(4 * sigma / step);
+    if (h > 400) h = 400;
+    var k = new Float64Array(2 * h + 1);
+    var prev = Phi((-h - 0.5) * step / sigma);
+    for (var d = -h; d <= h; d++) {
+      var cur = Phi((d + 0.5) * step / sigma);
+      k[d + h] = cur - prev;
+      prev = cur;
+    }
+    return { h: h, k: k };
+  }
+
+  /**
+   * Separable Gaussian hit rate over a (theta, speed, yaw) boolean grid. Cells with speed index > cellMaxB
+   * are misses; aims are only evaluated up to aimMaxB. KBs[b] is the ln-speed kernel for an aim at b
+   * (sigma_v depends on the aim speed). Returns the rate field (pooled buffer) and the evaluated box.
+   */
+  function rateField(v, cellMaxB, aimMaxB, KA, KC, KBs, tag) {
+    var H = v.hits, nA = v.nA, nB = v.nB, nC = v.nC;
+    var amin = nA, amax = -1, bmin = nB, bmax = -1, cmin = nC, cmax = -1, a, b, c, d, i;
+    var bTop = Math.min(cellMaxB, nB - 1);
+    for (a = 0; a < nA; a++) {
+      for (b = 0; b <= bTop; b++) {
+        var base = (a * nB + b) * nC;
+        for (c = 0; c < nC; c++) {
+          if (H[base + c]) {
+            if (a < amin) amin = a; if (a > amax) amax = a;
+            if (b < bmin) bmin = b; if (b > bmax) bmax = b;
+            if (c < cmin) cmin = c; if (c > cmax) cmax = c;
+          }
+        }
+      }
+    }
+    if (amax < 0) return null;
+    var size = nA * nB * nC;
+    var T1 = pool('T1' + tag, size), T2 = pool('T2' + tag, size), R = pool('R' + tag, size);
+    var hA = KA.h, ka = KA.k, hC = KC.h, kc = KC.k;
+    var A0 = Math.max(0, amin - hA), A1 = Math.min(nA - 1, amax + hA);
+    var C0 = Math.max(0, cmin - hC), C1 = Math.min(nC - 1, cmax + hC);
+    var nBC = nB * nC;
+    // theta pass
+    for (a = A0; a <= A1; a++) {
+      var dlo = Math.max(-hA, amin - a), dhi = Math.min(hA, amax - a);
+      for (b = bmin; b <= bmax; b++) {
+        for (c = cmin; c <= cmax; c++) {
+          var s = 0;
+          for (d = dlo; d <= dhi; d++) { if (H[((a + d) * nB + b) * nC + c]) s += ka[d + hA]; }
+          T1[(a * nB + b) * nC + c] = s;
+        }
+      }
+    }
+    // yaw pass
+    for (a = A0; a <= A1; a++) {
+      for (b = bmin; b <= bmax; b++) {
+        var row = (a * nB + b) * nC;
+        for (c = C0; c <= C1; c++) {
+          var lo = Math.max(-hC, cmin - c), hi = Math.min(hC, cmax - c), s2 = 0;
+          for (d = lo; d <= hi; d++) s2 += kc[d + hC] * T1[row + c + d];
+          T2[row + c] = s2;
+        }
+      }
+    }
+    // speed pass (aim-dependent kernel)
+    var hBmax = 0;
+    for (b = 0; b <= Math.min(aimMaxB, nB - 1); b++) if (KBs[b] && KBs[b].h > hBmax) hBmax = KBs[b].h;
+    var B0 = Math.max(0, bmin - hBmax), B1 = Math.min(aimMaxB, nB - 1, bmax + hBmax);
+    for (b = B0; b <= B1; b++) {
+      var K = KBs[b], hB = K.h, kb = K.k;
+      var e0 = Math.max(-hB, bmin - b), e1 = Math.min(hB, bmax - b);
+      for (a = A0; a <= A1; a++) {
+        var ab = a * nBC;
+        for (c = C0; c <= C1; c++) {
+          var s3 = 0;
+          for (d = e0; d <= e1; d++) s3 += kb[d + hB] * T2[ab + (b + d) * nC + c];
+          R[ab + b * nC + c] = s3;
+        }
+      }
+    }
+    if (B0 > B1) return null;
+    return { R: R, A0: A0, A1: A1, B0: B0, B1: B1, C0: C0, C1: C1 };
+  }
+
+  function wrap180(d) { d = ((d + 180) % 360 + 360) % 360 - 180; return d; }
+
+  /**
+   * Best aim on a grid view {hits, causes, nA, nB, nC, thetas[], speeds[], yaws[], thStep, lnStep, yawStep}.
+   * ignoreCap: evaluate as if the motor could reach any speed (used to explain "too slow").
+   */
+  function selectAim(v, p, mo, sh, bp, ignoreCap) {
+    var vCap = motorCore(mo, sh, bp, 1).vCap;
+    var maxB = -1;
+    for (var b = 0; b < v.nB; b++) if (v.speeds[b] <= vCap * (1 + 1e-12)) maxB = b;
+    var cellMaxB = ignoreCap ? v.nB - 1 : maxB;
+    if (cellMaxB < 0) return null;
+    var sigV = new Float64Array(v.nB), KBs = new Array(v.nB), KBs2 = new Array(v.nB), mcs = new Array(v.nB);
+    for (b = 0; b <= cellMaxB; b++) {
+      var mc = motorCore(mo, sh, bp, v.speeds[b]);
+      mcs[b] = mc;
+      sigV[b] = sigmaVOf(mc, p.precision.sigShooter);
+      KBs[b] = kernel(v.lnStep, sigV[b]);
+    }
+    var KA = kernel(v.thStep, p.precision.sigThetaDeg), KC = kernel(v.yawStep, p.precision.sigYawDeg);
+    var F = rateField(v, cellMaxB, cellMaxB, KA, KC, KBs, 'p');
+    if (!F) return null;
+    var R = F.R, nB = v.nB, nC = v.nC, best = -1, bi = -1, a, c, i;
+    for (a = F.A0; a <= F.A1; a++) for (b = F.B0; b <= F.B1; b++) for (c = F.C0; c <= F.C1; c++) {
+      i = (a * nB + b) * nC + c;
+      if (R[i] > best) { best = R[i]; bi = i; }
+    }
+    if (bi < 0) return null;
+    // tie-break a plateau with a wider (2 sigma) scatter so the aim sits in the middle of the window
+    var tol = 0.002, ties = [];
+    for (a = F.A0; a <= F.A1; a++) for (b = F.B0; b <= F.B1; b++) for (c = F.C0; c <= F.C1; c++) {
+      i = (a * nB + b) * nC + c;
+      if (R[i] >= best - tol) { ties.push(i); if (ties.length > 200000) break; }
+    }
+    if (ties.length > 1) {
+      var tieVals = ties.map(function (ix) { return R[ix]; });
+      for (b = 0; b <= cellMaxB; b++) KBs2[b] = kernel(v.lnStep, 2 * sigV[b]);
+      var F2 = rateField(v, cellMaxB, cellMaxB, kernel(v.thStep, 2 * p.precision.sigThetaDeg), kernel(v.yawStep, 2 * p.precision.sigYawDeg), KBs2, 's');
+      if (F2) {
+        var b2 = -1;
+        for (var t = 0; t < ties.length; t++) {
+          var val = F2.R[ties[t]];
+          if (val > b2) { b2 = val; bi = ties[t]; best = tieVals[t]; }
+        }
+      }
+    }
+    c = bi % nC; b = ((bi - c) / nC) % nB; a = ((bi - c) / nC - b) / nB;
+    return {
+      rate: Math.max(0, Math.min(1, best)), a: a, b: b, c: c,
+      theta: v.thetas[a], v: v.speeds[b], yaw: v.yaws[c],
+      sigV: sigV[b], mc: mcs[b], vCap: vCap, maxB: maxB, cellMaxB: cellMaxB,
+      KA: KA, KC: KC, KB: KBs[b]
+    };
+  }
+
+  // contiguous scoring run through the aim along each axis
+  function windowsOf(v, sel) {
+    var H = v.hits, nB = v.nB, nC = v.nC, a = sel.a, b = sel.b, c = sel.c;
+    function hit(ai, bi, ci) { return bi <= sel.cellMaxB && H[(ai * nB + bi) * nC + ci] === 1; }
+    var w = {};
+    if (!hit(a, b, c)) {
+      w.thetaDeg = [sel.theta, sel.theta]; w.v = [sel.v, sel.v]; w.yawDeg = [sel.yaw, sel.yaw];
+      w.idx = { a: [a, a], b: [b, b], c: [c, c] }; w.aimHit = false;
+      return w;
+    }
+    var lo = a, hi = a;
+    while (lo > 0 && hit(lo - 1, b, c)) lo--;
+    while (hi < v.nA - 1 && hit(hi + 1, b, c)) hi++;
+    w.thetaDeg = [v.thetas[lo], v.thetas[hi]]; var ia = [lo, hi];
+    lo = b; hi = b;
+    while (lo > 0 && hit(a, lo - 1, c)) lo--;
+    while (hi < v.nB - 1 && hit(a, hi + 1, c)) hi++;
+    w.v = [v.speeds[lo], v.speeds[hi]]; var ib = [lo, hi];
+    lo = c; hi = c;
+    while (lo > 0 && hit(a, b, lo - 1)) lo--;
+    while (hi < v.nC - 1 && hit(a, b, hi + 1)) hi++;
+    w.yawDeg = [v.yaws[lo], v.yaws[hi]]; var ic = [lo, hi];
+    w.idx = { a: ia, b: ib, c: ic }; w.aimHit = true;
+    return w;
+  }
+
+  // kernel-weighted most common miss cause around the aim
+  function nearMissCause(v, sel) {
+    var H = v.hits, Cz = v.causes, nB = v.nB, nC = v.nC, w = new Float64Array(9), tot = 0;
+    var KA = sel.KA, KB = sel.KB, KC = sel.KC;
+    for (var da = -KA.h; da <= KA.h; da++) {
+      var a = sel.a + da; if (a < 0 || a >= v.nA) continue;
+      for (var db = -KB.h; db <= KB.h; db++) {
+        var b = sel.b + db; if (b < 0 || b >= nB) continue;
+        for (var dc = -KC.h; dc <= KC.h; dc++) {
+          var c = sel.c + dc; if (c < 0 || c >= nC) continue;
+          var i = (a * nB + b) * nC + c;
+          var m = KA.k[da + KA.h] * KB.k[db + KB.h] * KC.k[dc + KC.h];
+          if (H[i] && b <= sel.cellMaxB) continue;
+          w[Cz[i] === C_HIT ? C_LONG : Cz[i]] += m; tot += m;
+        }
+      }
+    }
+    var best = -1, bc = 0;
+    for (var k = 1; k < 9; k++) if (w[k] > best) { best = w[k]; bc = k; }
+    return tot > 1e-4 ? CAUSE_NAMES[bc] : null;
+  }
+
+  // ------------------------------------------------------------------ fine stage (SPEC 7.5)
+  var _fbuf = null, _finfo = new Int32Array(4);
+  function fineStage(p, table, grid, sel, mo, sh, bp) {
+    if (!_fbuf) _fbuf = new Int16Array(2 * MAX_SAMPLES);
+    var ctx = grid.ctx, pr = p.precision;
+    var Wt = Math.max(3, 3 * pr.sigThetaDeg), Wp = Math.max(3, 3 * pr.sigYawDeg), Wv = Math.max(0.06, 3 * sel.sigV);
+    var ths = [], yaws = [], sps = [], i, n;
+    n = Math.ceil(Wt / 0.25 - 1e-9);
+    for (i = -n; i <= n; i++) { var th = sel.theta + i * 0.25; if (th >= 1 && th <= 89.75) ths.push(th); }
+    n = Math.ceil(Wp / 0.25 - 1e-9);
+    for (i = -n; i <= n; i++) yaws.push(sel.yaw + i * 0.25);
+    n = Math.ceil(Wv / 0.005 - 1e-9);
+    var lv0 = Math.log(sel.v);
+    for (i = -n; i <= n; i++) { var vv = i === 0 ? sel.v : Math.exp(lv0 + i * 0.005); if (vv >= 0.5 && vv <= 40) sps.push(vv); }
+    var nA = ths.length, nB = sps.length, nC = yaws.length;
+    var hits = new Uint8Array(nA * nB * nC), causes = new Uint8Array(nA * nB * nC);
+    var ycs = yaws.map(function (psi) { return yawCtx(ctx, psi); });
+    var nHits = 0;
+    for (var a = 0; a < nA; a++) {
+      for (var b = 0; b < nB; b++) {
+        fly(table.K, table.S0, ths[a], sps[b], _fbuf, _finfo);
+        nHits += testTraj(ctx, ycs, _fbuf, _finfo[0], _finfo[1], _finfo[2], _finfo[3], hits, causes, (a * nB + b) * nC);
+      }
+    }
+    var view = { hits: hits, causes: causes, nA: nA, nB: nB, nC: nC, thetas: ths, speeds: sps, yaws: yaws,
+      thStep: 0.25, lnStep: 0.005, yawStep: 0.25, nHits: nHits };
+    var fsel = nHits ? selectAim(view, p, mo, sh, bp, false) : null;
+    return { view: view, sel: fsel };
+  }
+
+  function coarseView(grid) {
+    var t = grid.table;
+    return { hits: grid.hits, causes: grid.causes, nA: grid.nA, nB: grid.nB, nC: grid.nC,
+      thetas: t.thetas, speeds: t.speeds, yaws: grid.yaws, thStep: t.thStep, lnStep: t.lnStep, yawStep: grid.dPsi, nHits: grid.nHits };
+  }
+
+  // ------------------------------------------------------------------ single shot (cross-check + drawing)
+  var _cbuf = null, _cinfo = new Int32Array(4), _ctxCache = { key: null, ctx: null };
+  function ctxFor(p, rIn) {
+    var key = gridKey(p, 0) + '|' + rIn;
+    if (_ctxCache.key !== key) { _ctxCache.key = key; _ctxCache.ctx = makeCtx(p, rIn); }
+    return _ctxCache.ctx;
+  }
+
+  function classifyCore(p, ctx, K, S0, thetaDeg, v, yawDeg) {
+    if (!_cbuf) _cbuf = new Int16Array(2 * MAX_SAMPLES);
+    var P = _cbuf, info = _cinfo, G = S.G;
+    fly(K, S0, thetaDeg, v, P, info);
+    var n = info[0], apexIdx = info[1];
+    var kz = cantIndex(ctx, P, n, apexIdx);
+    var yc = yawCtx(ctx, yawDeg);
+    var out = { code: 0, k: 0, t: 1 };
+    var code = runTest(ctx, yc, P, n, apexIdx, info[2], info[3], kz, out);
+    var c = yc.c * IPM, s = yc.s * IPM, x0 = ctx.x0, y0 = ctx.y0, h0 = ctx.h0;
+    var kEnd = Math.max(1, Math.min(out.k, n - 1)), tEnd = out.t;
+    var path = [], apex = -Infinity, i;
+    for (i = 0; i < kEnd; i++) {
+      var zi = h0 + P[2 * i + 1] * IPM;
+      path.push([x0 + P[2 * i] * c, y0 + P[2 * i] * s, zi]);
+      if (zi > apex) apex = zi;
+    }
+    var rE = P[2 * kEnd - 2] + tEnd * (P[2 * kEnd] - P[2 * kEnd - 2]);
+    var zE = P[2 * kEnd - 1] + tEnd * (P[2 * kEnd + 1] - P[2 * kEnd - 1]);
+    path.push([x0 + rE * c, y0 + rE * s, h0 + zE * IPM]);
+    if (h0 + zE * IPM > apex) apex = h0 + zE * IPM;
+    // last inward crossing of the mouth plane inside the pentagon, before the decision point
+    var tTo = null, vIn = null, T = ctx.T;
+    var fp = yc.fA * P[0] + yc.fB * P[1] + yc.fC;
+    for (i = 1; i <= kEnd; i++) {
+      var fk = yc.fA * P[2 * i] + yc.fB * P[2 * i + 1] + yc.fC;
+      if (fp >= 0 && fk < 0) {
+        var tc = fp / (fp - fk);
+        if (!(i === kEnd && tc > tEnd)) {
+          var rr = P[2 * i - 2] + tc * (P[2 * i] - P[2 * i - 2]), zz = P[2 * i - 1] + tc * (P[2 * i + 1] - P[2 * i - 1]);
+          var bw = worldToBody(x0 + rr * c, y0 + rr * s, h0 + zz * IPM, T.hx, T.sg);
+          if (insidePentagon(bw[0], bw[2])) {
+            tTo = (i - 1 + tc) * TBL.dt * TBL.storeEvery;
+            vIn = Math.hypot(P[2 * i] - P[2 * i - 2], P[2 * i + 1] - P[2 * i - 1]) / 1000 / (TBL.dt * TBL.storeEvery);
+          }
+        }
+      }
+      fp = fk;
+    }
+    return { hit: code === C_HIT, cause: code === C_HIT ? null : CAUSE_NAMES[code], path: path, apexIn: apex, tToCell: tTo, entrySpeed: vIn, code: code };
+  }
+
+  function classifyShot(params, thetaDeg, v, yawDeg) {
+    need();
+    var p = normParams(params), bp = ballProps(p.ballId), S0 = shooterSpin(p.shooter);
+    var ctx = ctxFor(p, bp.rIn);
+    var r = classifyCore(p, ctx, aeroK(bp), S0, thetaDeg, v, yawDeg);
+    delete r.code;
+    return r;
+  }
+
+  // ------------------------------------------------------------------ why nothing scores (SPEC 7.2)
+  var CAUSE_PRIORITY = [C_LIP, C_ROOF, C_CELL, C_FRAME, C_SHORT, C_LONG, C_WALL, C_FLOOR];
+  function dominantCause(grid) {
+    if (grid.dom) return grid.dom;
+    var ctx = grid.ctx, t = grid.table, ycs = grid.ycs, nY = ycs.length, nV = t.nV;
+    var counts = new Float64Array(9), total = 0, out = { code: 0, k: 0, t: 1 };
+    var cx = ctx.cen[0], cy = ctx.cen[1], cz = ctx.cen[2], x0 = ctx.x0, y0 = ctx.y0, h0 = ctx.h0;
+    var bestD = Infinity, bestPair = null;
+    for (var idx = 0; idx < t.nT * nV; idx++) {
+      var P = t.trajs[idx], n = t.lens[idx], ap = t.apex[idx];
+      if (P[2 * ap + 1] < ctx.zNearLoMM) continue;
+      var kz = cantIndex(ctx, P, n, ap);
+      var r0 = firstGE(P, 1, 0, ap + 1, ctx.zNearLoMM), r1 = firstGT(P, 1, 0, ap + 1, ctx.zNearHiMM) - 1;
+      var f0 = firstLE(P, 1, ap + 1, n, ctx.zNearHiMM), f1 = firstLT(P, 1, ap + 1, n, ctx.zNearLoMM) - 1;
+      if (r1 > kz) r1 = kz; if (f1 > kz) f1 = kz;
+      for (var y = 0; y < nY; y++) {
+        var yc = ycs[y], c = yc.c * IPM, s = yc.s * IPM, dmin = Infinity;
+        for (var run = 0; run < 2; run++) {
+          var ka = run ? f0 : r0, kb = run ? f1 : r1;
+          for (var k = ka; k <= kb; k++) {
+            var dx = x0 + P[2 * k] * c - cx, dy = y0 + P[2 * k] * s - cy, dz = h0 + P[2 * k + 1] * IPM - cz;
+            var d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < dmin) dmin = d2;
+          }
+        }
+        if (dmin < 144) {
+          var code = runTest(ctx, yc, P, n, ap, t.mono[idx], t.preMax[idx], kz, out);
+          counts[code === C_HIT ? C_LONG : code] += 1; total++;
+        }
+        if (dmin < bestD) { bestD = dmin; bestPair = [idx, y]; }
+      }
+    }
+    if (total === 0) {
+      for (var j = 0; j < grid.causes.length; j++) counts[grid.causes[j] || C_LONG] += 1;
+    }
+    var bc = C_SHORT, bv = -1;
+    CAUSE_PRIORITY.forEach(function (cd) { if (counts[cd] > bv) { bv = counts[cd]; bc = cd; } });
+    var cnt = {};
+    for (var q = 1; q < 9; q++) if (counts[q]) cnt[CAUSE_NAMES[q]] = counts[q];
+    grid.dom = { cause: CAUSE_NAMES[bc], code: bc, counts: cnt, near: total, closest: bestPair };
+    return grid.dom;
+  }
+
+  // ------------------------------------------------------------------ verdicts and reasons (SPEC 7.6)
+  var NO_ARC_TEXT = {
+    lip: 'Every arc from here clips the bottom lip of the CELL',
+    roof: 'Every arc from here hits the rim or roof of the CELL',
+    cell: 'Every arc from here runs into another CELL before it reaches the target',
+    frame: 'The HIVE frame or arm bar blocks every arc from here',
+    short: 'Every arc from here drops below the CELL mouth before it gets there',
+    long: 'Every arc from here sails past the CELL mouth',
+    wall: 'Every arc from here hits the field wall',
+    floor: 'Every arc from here hits the floor first'
+  };
+  function noArcReason(cause) { return NO_ARC_TEXT[cause] || 'No arc from here gets the ball cleanly into the CELL'; }
+
+  function tooSlowReason(vMin, mcMin) {
+    return 'Needs at least ' + fmt(vMin, 1) + ' m/s — ' + fmtInt(mcMin.motorRpm) + ' motor rpm; this motor tops out at ' +
+      fmtInt(mcMin.usableFreeRpm) + ' rpm';
+  }
+
+  function tightPhrase(v, sel, w, p) {
+    var pr = p.precision;
+    var mt = (Math.min(sel.theta - w.thetaDeg[0], w.thetaDeg[1] - sel.theta) + v.thStep / 2) / pr.sigThetaDeg;
+    var my = (Math.min(sel.yaw - w.yawDeg[0], w.yawDeg[1] - sel.yaw) + v.yawStep / 2) / pr.sigYawDeg;
+    var mv = (Math.min(Math.log(sel.v / w.v[0]), Math.log(w.v[1] / sel.v)) + v.lnStep / 2) / Math.max(1e-9, sel.sigV);
+    if (mv <= mt && mv <= my) {
+      var vHalf = 50 * (Math.log(w.v[1] / w.v[0]) + v.lnStep);
+      return { axis: 'v', margin: mv, text: w.v[1] - w.v[0] < 0.02 ?
+        'exit speed has to be within about ±' + fmt(Math.max(vHalf, 0.1), 1) + '% of ' + fmt(sel.v, 2) + ' m/s' :
+        'only exit speeds from ' + fmt(w.v[0], 2) + ' to ' + fmt(w.v[1], 2) + ' m/s go in' };
+    }
+    if (mt <= my) {
+      var tW = w.thetaDeg[1] - w.thetaDeg[0] + v.thStep;
+      return { axis: 'theta', margin: mt, text: w.thetaDeg[1] - w.thetaDeg[0] < 0.5 ?
+        'the launch angle has to be within a ' + fmt(tW, 1) + '° window around ' + fmt(sel.theta, 1) + '°' :
+        'only launch angles from ' + fmt(w.thetaDeg[0], w.thetaDeg[0] % 1 ? 1 : 0) + '° to ' +
+        fmt(w.thetaDeg[1], w.thetaDeg[1] % 1 ? 1 : 0) + '° go in' };
+    }
+    var width = w.yawDeg[1] - w.yawDeg[0] + v.yawStep;
+    return { axis: 'yaw', margin: my, text: 'the left-right aim has only a ' + fmt(width, 1) + '° window' };
+  }
+
+  function decide(p, v, sel) {
+    var M = S.model, rate = sel.rate, h = sel.mc.headroom;
+    var w = windowsOf(v, sel), tight = tightPhrase(v, sel, w, p);
+    var rp = Math.floor(rate * 100 + 1e-9), hp = Math.ceil(h * 100 - 1e-9), room = Math.max(0, Math.round((1 - h) * 100));
+    var d = { windows: w, tight: tight };
+    if (rate >= M.thPossible) {
+      if (h > M.downgrade && sel.mc.control === 'pid') {
+        d.verdict = VERDICT.MID; d.code = 'LOW_HEADROOM';
+        d.reason = 'Scores ' + rp + '% of shots, but the motor runs at ' + hp + '% of free speed — no headroom as the battery drains';
+      } else {
+        d.verdict = VERDICT.OK; d.code = 'OK';
+        d.reason = 'Scores ' + rp + '% of shots with ' + room + '% motor headroom';
+      }
+    } else if (rate >= M.thMid) {
+      d.verdict = VERDICT.MID; d.code = 'MISSES_OFTEN';
+      d.reason = 'Scores ' + rp + '% of shots — ' + tight.text + (h > M.downgrade && sel.mc.control === 'pid' ? '; the motor is also at ' + hp + '% of free speed' : '');
+    } else {
+      d.verdict = VERDICT.BAD; d.code = 'RARELY_SCORES';
+      d.reason = 'Only ' + rp + '% of shots score — ' + tight.text;
+    }
+    return d;
+  }
+
+  // ------------------------------------------------------------------ warnings
+  var ROBOT_HALF = 9;
+  function warningsFor(p, headingDeg) {
+    var G = S.G, W = [], x = p.robot.x, y = p.robot.y;
+    if (p.clamped) {
+      W.push({ code: 'CLAMPED', text: 'Robot moved back inside the field — its centre can be at most ' + fmt(G.robotLimit, 1) + ' in from the middle in x and y' });
+    }
+    var c = Math.cos(headingDeg * DEG), s = Math.sin(headingDeg * DEG), onLeg = false;
+    G.legs.forEach(function (leg) {
+      var base = leg[0][2] <= leg[1][2] ? leg[0] : leg[1];
+      var dx = base[0] - x, dy = base[1] - y;
+      var lx = dx * c + dy * s, ly = -dx * s + dy * c;
+      var ex = Math.max(Math.abs(lx) - ROBOT_HALF, 0), ey = Math.max(Math.abs(ly) - ROBOT_HALF, 0);
+      if (Math.hypot(ex, ey) < G.tubeR) onLeg = true;
+    });
+    if (onLeg) W.push({ code: 'ON_FRAME_LEG', text: 'Robot overlaps a HIVE frame leg — it cannot sit here' });
+    var under = ['red', 'blue'].some(function (al) { return Math.abs(x - G.hx[al]) <= G.W2 && Math.abs(y) <= G.swingMaxU; });
+    if (p.h0 > G.swingWarnZ && under) {
+      W.push({ code: 'TALL_UNDER_HIVE', text: 'Shooter exit is above ' + fmt(G.swingWarnZ, 1) + ' in while under the HIVE — a TIP could hit it' });
+    }
+    return W;
+  }
+
+  // ------------------------------------------------------------------ evaluate
+  function evaluate(params, mode) {
+    need();
+    var tAll = now();
+    mode = mode === 'full' ? 'full' : 'coarse';
+    var p = normParams(params), sh = p.shooter, bp = ballProps(p.ballId), mo = S.motorById[p.motorId];
+    var S0 = shooterSpin(sh);
+    var t0 = now();
+    var table = buildTable(p.ballId, S0);
+    var tableMs = now() - t0;
+    var t1 = now();
+    var grid = getGrid(p, table), ctx = grid.ctx, view = coarseView(grid);
+    var pr = p.precision;
+    var res = {
+      verdict: VERDICT.BAD, code: 'NO_ARC', hitRate: 0, reason: '',
+      psi0Deg: ctx.psi0, distIn: ctx.dist,
+      best: null, motor: null,
+      sigma: { thetaDeg: pr.sigThetaDeg, yawDeg: pr.sigYawDeg, v: null, shooter: pr.sigShooter, motor: null, recovery: null },
+      trajectory: null, ghosts: [], missCause: null, warnings: [],
+      timings: { tableMs: tableMs, coarseMs: 0, fineMs: 0, totalMs: 0 },
+      mode: mode, robot: { x: p.robot.x, y: p.robot.y }, h0: p.h0, S0: S0, gridHits: grid.nHits, closestMiss: null
+    };
+    var coarseMs, fineMs = 0;
+    if (grid.nHits === 0) {
+      var dom = dominantCause(grid);
+      res.reason = noArcReason(dom.cause);
+      res.missCause = dom.cause;
+      res.causeCounts = dom.counts;
+      coarseMs = now() - t1;
+      if (dom.closest) {
+        var ci = dom.closest[0], th = table.thetas[Math.floor(ci / table.nV)], vv = table.speeds[ci % table.nV], yw = grid.yaws[dom.closest[1]];
+        var cm = classifyCore(p, ctx, table.K, S0, th, vv, yw);
+        res.closestMiss = { thetaDeg: th, v: vv, yawDeg: yw, cause: cm.cause, path: cm.path };
+      }
+    } else {
+      var sel = selectAim(view, p, mo, sh, bp, false), uncapped = false, v = view, d = null;
+      if (!sel) {
+        uncapped = true;
+        sel = selectAim(view, p, mo, sh, bp, true);
+        var mcMin = motorCore(mo, sh, bp, grid.minHitV);
+        res.code = 'TOO_SLOW';
+        res.reason = tooSlowReason(grid.minHitV, mcMin);
+        res.minSpeed = grid.minHitV;
+      }
+      coarseMs = now() - t1;
+      if (!uncapped && mode === 'full') {
+        var tf = now();
+        var fine = fineStage(p, table, grid, sel, mo, sh, bp);
+        if (fine.sel) { sel = fine.sel; v = fine.view; }
+        fineMs = now() - tf;
+      }
+      if (sel) {
+        if (!uncapped) {
+          d = decide(p, v, sel);
+          res.verdict = d.verdict; res.code = d.code; res.reason = d.reason; res.hitRate = sel.rate;
+          res.tightAxis = d.tight.axis;
+        }
+        var w = d ? d.windows : windowsOf(v, sel);
+        var shot = classifyCore(p, ctx, table.K, S0, sel.theta, sel.v, sel.yaw);
+        res.best = {
+          thetaDeg: sel.theta, yawDeg: sel.yaw, yawOffsetDeg: wrap180(sel.yaw - ctx.psi0),
+          v: sel.v, vFtS: sel.v / 0.3048,
+          apexIn: shot.apexIn, tToCell: shot.tToCell, entrySpeed: shot.entrySpeed,
+          windows: { thetaDeg: w.thetaDeg.slice(), v: w.v.slice(), yawDeg: w.yawDeg.slice() },
+          hit: shot.hit, cause: shot.cause, reachable: !uncapped
+        };
+        res.motor = sel.mc;
+        res.sigma.v = sel.sigV; res.sigma.motor = sel.mc.sigmaMotor; res.sigma.recovery = sel.mc.sigmaRecovery;
+        res.trajectory = shot.path;
+        if (w.v[0] < sel.v) res.ghosts.push(classifyCore(p, ctx, table.K, S0, sel.theta, w.v[0], sel.yaw).path);
+        if (w.v[1] > sel.v) res.ghosts.push(classifyCore(p, ctx, table.K, S0, sel.theta, w.v[1], sel.yaw).path);
+        res.missCause = uncapped ? null : nearMissCause(v, sel);
+      }
+    }
+    res.warnings = warningsFor(p, res.best ? res.best.yawDeg : ctx.psi0);
+    res.timings.coarseMs = coarseMs;
+    res.timings.fineMs = fineMs;
+    res.timings.totalMs = now() - tAll;
+    return res;
+  }
+
+  // ------------------------------------------------------------------ motor comparison (SPEC 7.8)
+  function compareMotors(params) {
+    need();
+    var p = normParams(params), sh = p.shooter, bp = ballProps(p.ballId), S0 = shooterSpin(sh);
+    var table = buildTable(p.ballId, S0), grid = getGrid(p, table), view = coarseView(grid);
+    var dom = grid.nHits === 0 ? dominantCause(grid) : null;
+    return S.motors.map(function (mo) {
+      var row = { motorId: mo.id, label: mo.label, freeRpm: mo.freeRpm, motorRpm: null, headroom: null, recoveryMs: null,
+        hitRate: 0, verdict: VERDICT.BAD, reason: '', code: 'NO_ARC' };
+      if (dom) { row.reason = noArcReason(dom.cause); return row; }
+      var sel = selectAim(view, p, mo, sh, bp, false);
+      if (!sel) {
+        var mcMin = motorCore(mo, sh, bp, grid.minHitV);
+        row.code = 'TOO_SLOW'; row.reason = tooSlowReason(grid.minHitV, mcMin);
+        row.motorRpm = mcMin.motorRpm; row.headroom = mcMin.headroom; row.recoveryMs = mcMin.recoveryMs;
+        return row;
+      }
+      var d = decide(p, view, sel);
+      row.motorRpm = sel.mc.motorRpm; row.headroom = sel.mc.headroom; row.recoveryMs = sel.mc.recoveryMs;
+      row.hitRate = sel.rate; row.verdict = d.verdict; row.reason = d.reason; row.code = d.code; row.v = sel.v;
+      return row;
+    });
+  }
+
+  // ------------------------------------------------------------------ field scan points (SPEC 7.9, 10)
+  function scanPoints(stepIn, limitIn) {
+    need();
+    var step = num(stepIn, 6);
+    if (!(step > 0)) step = 6;
+    var lim = num(limitIn, S.G.half - 10.5);
+    var n = Math.floor(lim / step + 1e-9), pts = [];
+    for (var j = -n; j <= n; j++) for (var i = -n; i <= n; i++) pts.push({ x: i * step, y: j * step });
+    return pts;
+  }
+
+  // ------------------------------------------------------------------ side view (SPEC 8)
+  function sideView(params, result) {
+    need();
+    var p = normParams(params), G = S.G;
+    var ox = p.robot.x, oy = p.robot.y, heading;
+    if (result && result.best) heading = result.best.yawDeg;
+    else if (result && typeof result.psi0Deg === 'number') heading = result.psi0Deg;
+    else {
+      var cen = mouthCentroid(p.target, p.hiveState[p.target]);
+      heading = Math.atan2(cen[1] - oy, cen[0] - ox) / DEG;
+    }
+    var ux = Math.cos(heading * DEG), uy = Math.sin(heading * DEG);
+    function pr(pt) { return [(pt[0] - ox) * ux + (pt[1] - oy) * uy, pt[2]]; }
+    var model = hiveModel(p.hiveState), polys = [], mouth = null;
+    model.hives.forEach(function (h) {
+      h.cells.forEach(function (cell) {
+        var isT = h.alliance === p.target && cell.role === 'up';
+        polys.push({ role: isT ? 'target' : 'cell', alliance: h.alliance, cell: cell.role, pts: convexHull(cell.vertices.map(pr)) });
+        if (isT) mouth = cell.mouth.map(pr);
+      });
+    });
+    function thick(a, b, R, role, name) {
+      var pa = pr(a), pb = pr(b), pts = [];
+      for (var k = 0; k < 12; k++) {
+        var an = k * Math.PI / 6, dx = R * Math.cos(an), dz = R * Math.sin(an);
+        pts.push([pa[0] + dx, pa[1] + dz], [pb[0] + dx, pb[1] + dz]);
+      }
+      polys.push({ role: role, part: name, pts: convexHull(pts) });
+    }
+    model.hives.forEach(function (h) {
+      for (var k = 0; k + 1 < h.armBar.length; k++) thick(h.armBar[k], h.armBar[k + 1], G.armR, 'arm', 'arm bar');
+    });
+    G.legs.forEach(function (s) { thick(s[0], s[1], G.tubeR, 'frame', 'leg'); });
+    thick(G.crossbar[0], G.crossbar[1], G.tubeR, 'frame', 'crossbar');
+    G.corners.forEach(function (s) { thick(s[0], s[1], G.cornerR, 'frame', 'corner block'); });
+    var minS = 0, maxS = 0;
+    polys.forEach(function (pl) { pl.pts.forEach(function (q) { if (q[0] < minS) minS = q[0]; if (q[0] > maxS) maxS = q[0]; }); });
+    var arcs = { trajectory: null, ghosts: [] };
+    if (result && result.trajectory) {
+      arcs.trajectory = result.trajectory.map(pr);
+      arcs.trajectory.forEach(function (q) { if (q[0] > maxS) maxS = q[0]; if (q[0] < minS) minS = q[0]; });
+    }
+    if (result && result.ghosts) arcs.ghosts = result.ghosts.map(function (g) { return g.map(pr); });
+    return {
+      uAxis: [ux, uy], origin: [ox, oy], headingDeg: heading,
+      polys: polys, mouth: mouth, floor: [minS - 6, maxS + 6],
+      arcs: arcs, lipZ: G.lipZ, topZ: G.topZ
+    };
+  }
+
+  function clearCaches() {
+    S.tables = {}; S.tableKeys = []; S.gridCache = []; S.obsCache = {}; _ctxCache.key = null; _pool = {};
+  }
+
+  return {
+    version: '1.0.0',
+    init: init,
+    ballProps: ballProps,
+    shooterSpin: shooterSpin,
+    buildTable: buildTable,
+    hiveModel: hiveModel,
+    motorModel: motorModel,
+    classifyShot: classifyShot,
+    evaluate: evaluate,
+    compareMotors: compareMotors,
+    scanPoints: scanPoints,
+    sideView: sideView,
+    CAUSES: CAUSE_NAMES.slice(1),
+    constants: function () { need(); return { aero: Object.assign({}, S.aero), model: JSON.parse(JSON.stringify(S.model)) }; },
+    VERDICTS: [VERDICT.OK, VERDICT.MID, VERDICT.BAD],
+    _internal: {
+      erf: erf, Phi: Phi, worldToBody: worldToBody, bodyToWorld: bodyToWorld,
+      dEdge: dEdge, dPoly: dPoly, insidePentagon: insidePentagon, dInt: dInt,
+      prismDist: prismDist, shellDist: shellDist, capsuleDist: capsuleDist,
+      flyFloat: flyFloat, terminalSpeed: terminalSpeed, normParams: normParams, shooterNorm: shooterNorm,
+      obstaclesFor: obstaclesFor, mouthCentroid: mouthCentroid, penta: penta,
+      geometry: function () { return S.G; }, tableSpec: TBL, clearCaches: clearCaches,
+      kernel: kernel
+    }
+  };
+});
+</script>
 <script>
 "use strict";
 // ---- src/hardware.js ----
@@ -673,6 +2377,7 @@ const HW_PARTS = {
 /* goBILDA Yellow Jacket planetary gearmotors: the trailing group of the part
    number is the nominal reduction, which fixes both speed and stall torque. */
 const YELLOW_JACKET = {
+  1:{ratio:1,rpm:6000,nm:0.14},
   3:{ratio:3.7,rpm:1620,nm:0.46},   5:{ratio:5.2,rpm:1150,nm:0.65},
   13:{ratio:13.7,rpm:435,nm:1.68},  19:{ratio:19.2,rpm:312,nm:2.38},
   26:{ratio:26.9,rpm:223,nm:3.34},  27:{ratio:26.9,rpm:223,nm:3.34},
@@ -689,6 +2394,15 @@ const GENERIC = {
   Motor: {fam:"unspecified motor",   kind:"motor",role:"Motor", stallNm:2.38,rpm:312,ratio:19.2,guess:true},
   CRServo:{fam:"continuous servo",   kind:"crservo",role:"CR",  stallNm:1.40,rpm:100,guess:true}
 };
+
+/* "// 6000 rpm goBILDA" above a motor: the person who built it said which one. */
+function motorFromComment(text){
+  const m=/(\d{2,4})\s*rpm/i.exec(text||""); if(!m) return null;
+  const rpm=+m[1];
+  for(const k in YELLOW_JACKET){ const yj=YELLOW_JACKET[k];
+    if(yj.rpm===rpm) return {src:"code", fam:"goBILDA Yellow Jacket "+yj.ratio+":1", kind:"motor", role:"Motor", stallNm:yj.nm, rpm:yj.rpm, ratio:yj.ratio}; }
+  return Object.assign({}, GENERIC.Motor, {src:"code", fam:rpm+" rpm motor", rpm, ratio:6000/rpm, guess:false});
+}
 
 /* Identify an actuator from a part number and/or the CAD part name. */
 function hwFromPart(pn, name){
@@ -734,6 +2448,8 @@ function specDetect(dev, mech, trust){
 
   // --- code wins ---
   if(wantsMotor){
+    const said=motorFromComment(dev.intent);
+    if(said) return said;
     if(cadSpec && cadSpec.kind === "motor") return Object.assign({src:"CAD part, code type"}, cadSpec);
     return Object.assign({src:"code"}, GENERIC.Motor);
   }
@@ -997,6 +2713,80 @@ public class TimedDriveAuto extends LinearOpMode {
         rightFront.setPower(0);
         leftBack.setPower(0);
         rightBack.setPower(0);
+    }
+}`;
+
+const SHOOTER_JAVA = `package org.firstinspires.ftc.teamcode;
+
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
+import com.qualcomm.robotcore.hardware.Servo;
+
+@TeleOp(name = "BIOBUZZ Shooter")
+public class ShooterTeleOp extends LinearOpMode {
+
+    DcMotor leftFront;
+    DcMotor rightFront;
+    DcMotor leftBack;
+    DcMotor rightBack;
+
+    // 6000 rpm goBILDA, 1:1 to the flywheel
+    DcMotorEx flywheel;
+    Servo kicker;
+
+    static double NEAR_VELOCITY = 1080;
+    static double FAR_VELOCITY = 1280;
+    static final double KICK_REST = 0.20;
+    static final double KICK_FIRE = 0.55;
+
+    double target = 0;
+
+    @Override
+    public void runOpMode() {
+        leftFront = hardwareMap.get(DcMotor.class, "leftFront");
+        rightFront = hardwareMap.get(DcMotor.class, "rightFront");
+        leftBack = hardwareMap.get(DcMotor.class, "leftBack");
+        rightBack = hardwareMap.get(DcMotor.class, "rightBack");
+        flywheel = hardwareMap.get(DcMotorEx.class, "flywheel");
+        kicker = hardwareMap.get(Servo.class, "kicker");
+
+        kicker.setPosition(KICK_REST);
+
+        waitForStart();
+
+        while (opModeIsActive()) {
+            double y = -gamepad1.left_stick_y;
+            double x = gamepad1.left_stick_x;
+            double turn = gamepad1.right_stick_x;
+
+            leftFront.setPower(y + x + turn);
+            leftBack.setPower(y - x + turn);
+            rightFront.setPower(y - x - turn);
+            rightBack.setPower(y + x - turn);
+
+            if (gamepad2.dpad_up) {
+                target = FAR_VELOCITY;
+            }
+            if (gamepad2.dpad_down) {
+                target = NEAR_VELOCITY;
+            }
+            if (gamepad2.b) {
+                target = 0;
+            }
+            flywheel.setVelocity(target);
+
+            if (gamepad2.right_bumper) {
+                kicker.setPosition(KICK_FIRE);
+            } else {
+                kicker.setPosition(KICK_REST);
+            }
+
+            telemetry.addData("Flywheel target", target);
+            telemetry.addData("Flywheel velocity", flywheel.getVelocity());
+            telemetry.update();
+        }
     }
 }`;
 
@@ -2770,6 +4560,361 @@ function restPosOf(code,devName){
   const r=travelRange(code,devName); return r?r.lo:0.5;
 }
 
+// ---- src/field.js ----
+/* ============================================================
+   7a.  FIELD — FTC 2026-27 BIOBUZZ
+
+   Built from the BIOBUZZ Shot Sim's measured field data and HIVE model
+   (vendor/biobuzz-shot-sim), so the field the robot drives on and the
+   shot physics agree to the inch. The frame is the Shot Sim's, in metres:
+   origin at the field centre on the tile tops, +x toward the blue
+   alliance wall, +y away from the audience, +z up, headings
+   counter-clockwise from +x. Sim.chassis lives in this frame.
+   ============================================================ */
+const IN=0.0254;
+const TIP_GRAMS=190;             // EFSG 12.3: 174 g placed must not TIP, 199 g launched must
+const ELEMENT_G={pollen:24.9, nectar:41.3};
+const FRONTS={"+x":0, "+y":-Math.PI/2, "-x":Math.PI, "-y":Math.PI/2};
+
+const Field={
+  E:null, data:null, ok:false, version:0,
+  hive:{red:-1, blue:1},          // side each HIVE's up-CELL faces: -1 audience, +1 far
+  cells:{red:[], blue:[]},        // what sits in each up-CELL right now
+  tips:{red:0, blue:0}, lastTip:null,
+
+  init(engine,data){
+    this.E=null; this.data=null; this.ok=false;
+    try{
+      if(!engine||!data||!data.field||!data.field.field) return false;
+      const r=engine.init(data);
+      if(!r||!r.ok) return false;
+    }catch(e){ return false; }
+    this.E=engine; this.data=data; this.ok=true;
+    this.reset();
+    return true;
+  },
+  /* Match start: up-CELLs as staged, each holding 3 NECTAR of its own colour. */
+  reset(){
+    if(!this.ok) return;
+    const s=this.data.field.hive.upSideStart;
+    this.hive={red:s.red, blue:s.blue};
+    this.cells={red:[], blue:[]};
+    for(const al of ["red","blue"]) for(let i=0;i<3;i++) this.cells[al].push({kind:"nectar", color:al});
+    this.tips={red:0, blue:0}; this.lastTip=null;
+    this._hm=null; this.version++;
+  },
+  half(){ return this.ok ? this.data.field.field.half*IN : 1.83; },
+  wallH(){ return this.ok ? this.data.field.field.wallHeight*IN : 0.31; },
+  model(){
+    const key=this.hive.red+","+this.hive.blue;
+    if(!this._hm||this._hmKey!==key){ this._hm=this.E.hiveModel({red:this.hive.red, blue:this.hive.blue}); this._hmKey=key; }
+    return this._hm;
+  },
+  grams(al){ return this.cells[al].reduce((g,e)=>g+(ELEMENT_G[e.kind]||0),0); },
+  /* An element lands in an up-CELL. Past the TIP mass the HIVE swings over:
+     that CELL goes down and spills on its own side, the other comes up empty. */
+  addToCell(al,kind,color){
+    this.cells[al].push({kind, color:color||al});
+    if(this.grams(al)>=TIP_GRAMS){ this.tip(al); return true; }
+    this.version++;
+    return false;
+  },
+  tip(al){
+    const from=this.hive[al];
+    this.hive[al]=-from;
+    this.cells[al]=[];
+    this.tips[al]++;
+    this.lastTip={al, from, to:-from, n:this.tips[al]};
+    this.version++;
+  },
+
+  /* Legal start (G304): own side, touching the alliance wall, facing the field,
+     clear of the LOADING ZONE and the FLOWER on that wall. */
+  startPose(alliance,fp){
+    const H=this.half(), s=alliance==="blue"?1:-1;
+    const hx=(fp&&fp.hx)||0.2286;
+    return {x:s*(H-hx), y:0, h:alliance==="blue"?Math.PI:0};
+  },
+
+  /* Things a robot can't drive through, flattened to 2-D capsules at the
+     height the robot reaches (the HIVE legs lean inward, so a taller robot
+     meets them further in). */
+  obstacles(robotH){
+    if(!this.ok) return [];
+    const F=this.data.field, fr=F.hive.frame, out=[];
+    const reach=Math.max(0.05,Math.min(robotH||0.35, 0.74))/IN;
+    for(const leg of fr.legs){
+      const a=leg[0][2]<=leg[1][2]?leg[0]:leg[1], b=a===leg[0]?leg[1]:leg[0];
+      const t=Math.min(1, reach/Math.max(1e-6,b[2]-a[2]));
+      out.push({what:"HIVE leg", r:fr.tubeRadius*IN,
+        a:[a[0]*IN, a[1]*IN], b:[(a[0]+(b[0]-a[0])*t)*IN, (a[1]+(b[1]-a[1])*t)*IN]});
+    }
+    if(fr.footBars) for(const sg of fr.footBars.segments)
+      out.push({what:"HIVE foot bar", r:(fr.footBars.width/2)*IN, a:[sg[0][0]*IN, sg[0][1]*IN], b:[sg[1][0]*IN, sg[1][1]*IN]});
+    const H=F.field.half;
+    for(const fl of F.flowers){
+      // a box against the wall, as a capsule along the wall
+      const along=fl.wall==="+y"||fl.wall==="-y", sgn=fl.wall.charAt(0)==="+"?1:-1;
+      const across=sgn*(H-fl.depth/2), half=Math.max(0,(fl.alongWall-fl.depth)/2);
+      const c=along?[fl.x,across]:[across,fl.y];
+      const a=along?[c[0]-half,c[1]]:[c[0],c[1]-half], b=along?[c[0]+half,c[1]]:[c[0],c[1]+half];
+      out.push({what:"FLOWER", r:fl.depth/2*IN, a:[a[0]*IN,a[1]*IN], b:[b[0]*IN,b[1]*IN]});
+    }
+    return out;
+  },
+
+  /* Keep the chassis on the field: walls exactly (the rotated footprint's
+     extent), obstacles by pushing out along the shallowest direction.
+     Returns what it hit, or null. Mutates ch. */
+  collide(ch,fp,obs){
+    let hit=null;
+    for(let pass=0; pass<3; pass++){
+      const H=this.half(), c=Math.abs(Math.cos(ch.h)), s=Math.abs(Math.sin(ch.h));
+      const ex=c*fp.hx+s*fp.hy, ey=s*fp.hx+c*fp.hy;
+      const nx=Math.max(-H+ex,Math.min(H-ex,ch.x)), ny=Math.max(-H+ey,Math.min(H-ey,ch.y));
+      if(nx!==ch.x||ny!==ch.y){ ch.x=nx; ch.y=ny; hit=hit||"wall"; }
+      let moved=false;
+      for(const o of obs||[]){
+        const d=capsulePush(ch,fp,o);
+        if(d){ ch.x+=d[0]; ch.y+=d[1]; hit=hit||o.what; moved=true; }
+      }
+      if(!moved) break;
+    }
+    return hit;
+  },
+
+  /* Which zone a point is in, for the pose readout. Inches in, name out. */
+  zoneAt(xIn,yIn){
+    if(!this.ok) return null;
+    const F=this.data.field;
+    for(const al of ["red","blue"]){
+      const z=F.loadingZones[al];
+      if(xIn>=z.x0&&xIn<=z.x1&&yIn>=z.y0&&yIn<=z.y1) return al+" LOADING ZONE";
+    }
+    const fr=F.hive.frame;
+    if(Math.abs(xIn)<=fr.baseX/2&&Math.abs(yIn)<=fr.baseY/2) return "under the HIVEs";
+    return xIn<0?"red side":"blue side";
+  }
+};
+
+/* How far to move an oriented rectangle (the robot) so a capsule no longer
+   overlaps it. Works in the robot's own frame, then rotates back. */
+function capsulePush(ch,fp,o){
+  const c=Math.cos(ch.h), s=Math.sin(ch.h);
+  const toL=p=>{ const dx=p[0]-ch.x, dy=p[1]-ch.y; return [dx*c+dy*s, -dx*s+dy*c]; };
+  const A=toL(o.a), B=toL(o.b), dx=B[0]-A[0], dy=B[1]-A[1], L2=dx*dx+dy*dy;
+  // quick reject: capsule's box against the footprint
+  if(Math.min(A[0],B[0])-o.r>fp.hx||Math.max(A[0],B[0])+o.r<-fp.hx||
+     Math.min(A[1],B[1])-o.r>fp.hy||Math.max(A[1],B[1])+o.r<-fp.hy) return null;
+  const ts=[0,1];
+  for(let i=1;i<16;i++) ts.push(i/16);
+  if(L2>1e-12){
+    for(const q of [[fp.hx,fp.hy],[fp.hx,-fp.hy],[-fp.hx,fp.hy],[-fp.hx,-fp.hy],[0,0]])
+      ts.push(Math.max(0,Math.min(1,((q[0]-A[0])*dx+(q[1]-A[1])*dy)/L2)));
+  }
+  let best=null, pen=0;
+  for(const t of ts){
+    const px=A[0]+dx*t, py=A[1]+dy*t;
+    const qx=Math.max(-fp.hx,Math.min(fp.hx,px)), qy=Math.max(-fp.hy,Math.min(fp.hy,py));
+    const ex=qx-px, ey=qy-py, d=Math.hypot(ex,ey);
+    let p, ux, uy;
+    if(d>1e-9){ p=o.r-d; ux=ex/d; uy=ey/d; }
+    else{
+      const ox=fp.hx-Math.abs(px), oy=fp.hy-Math.abs(py);
+      if(ox<oy){ p=ox+o.r; ux=px>0?-1:1; uy=0; } else { p=oy+o.r; ux=0; uy=py>0?-1:1; }
+    }
+    if(p>pen){ pen=p; best=[ux,uy]; }
+  }
+  if(!best) return null;
+  return [(best[0]*c-best[1]*s)*pen, (best[0]*s+best[1]*c)*pen];
+}
+
+/* The robot's footprint in its own frame (forward = +x) from the CAD box
+   and which way the CAD's front faces. */
+function footprintOf(cad,front){
+  const b=cad&&cad.bbox;
+  if(!b) return {hx:0.2286, hy:0.2286, h:0.35};
+  const ex=Math.max(0.05,(b.max[0]-b.min[0])/2), ey=Math.max(0.05,(b.max[1]-b.min[1])/2);
+  const side=/y/.test(front||"+x");
+  return {hx:side?ey:ex, hy:side?ex:ey, h:Math.max(0.05,b.max[2]-b.min[2])};
+}
+
+// ---- src/shots.js ----
+/* ============================================================
+   7b.  SHOTS — the running OpMode's shooter on the BIOBUZZ field
+
+   The flywheel speed comes from what the code commands (setPower or
+   setVelocity), the launch angle from the hood, the aim from where the
+   robot is pointing. The BIOBUZZ Shot Sim flies the ball — drag, spin,
+   the CELL lip, the frame — and says whether it goes in. Three POLLEN
+   on top of the staged NECTAR TIP the HIVE, as on the real field.
+   ============================================================ */
+const SHOT_STEP_S=0.005;          // the Shot Sim stores a path sample every 5 ms
+const SHOOTER_NAME=/shoot|fly_?wheel|launch|cannon|outtake/i;
+const FEEDER_NAME=/feed|kick|flick|push|index|transfer|gate|trigger|stopper|loader|hammer/i;
+const NOT_SHOOTER=/slide|lift|claw|wrist|elbow|drive/i;
+
+const Shots={
+  cfg:null, alliance:"red",
+  flying:[], landed:[], log:[], fired:0, scored:0, t:0, lastFeed:-1e9, feedWas:false,
+  defaults(){ return {shooter:null, feeder:null, motorId:null, hoodDeg:75, h0In:16, wheelMm:96, gear:1, mountDeg:0, ball:"pollen", type:"single"}; },
+  reset(){ this.flying=[]; this.landed=[]; this.log=[]; this.fired=0; this.scored=0; this.t=0; this.lastFeed=-1e9; this.feedWas=false; },
+  target(){ return this.alliance==="blue"?"blue":"red"; },
+
+  /* Which devices look like a shooter and a feeder, by name and type. */
+  detect(code){
+    const devs=(code&&code.devices)||[];
+    const motors=devs.filter(d=>/DcMotor/i.test(d.type||""));
+    const shooter=motors.filter(d=>SHOOTER_NAME.test(d.name)&&!NOT_SHOOTER.test(d.name)).map(d=>d.name);
+    const feeder=devs.filter(d=>FEEDER_NAME.test(d.name)&&shooter.indexOf(d.name)<0).map(d=>d.name);
+    return {shooter, feeder};
+  },
+  /* Fill in whatever the user hasn't chosen from what the code declares. */
+  adopt(code){
+    if(!this.cfg) this.cfg=this.defaults();
+    const d=this.detect(code), names=((code&&code.devices)||[]).map(x=>x.name);
+    if(!this.cfg.shooter||names.indexOf(this.cfg.shooter)<0) this.cfg.shooter=d.shooter[0]||null;
+    if(!this.cfg.feeder||names.indexOf(this.cfg.feeder)<0) this.cfg.feeder=d.feeder[0]||null;
+    if(!this.cfg.motorId) this.cfg.motorId=nearestMotorId(this.deviceRpm());
+  },
+  /* Output-shaft free speed of the shooter motor. An unnamed motor is
+     assumed to be the 6000 rpm 1:1 most flywheels use. */
+  deviceRpm(){
+    const s=this.cfg&&this.cfg.shooter&&Sim.dev[this.cfg.shooter];
+    return s&&s.spec&&s.spec.rpm&&!s.spec.guess ? s.spec.rpm : 6000;
+  },
+  shooterSpec(){
+    const c=this.cfg;
+    return {type:c.type, wheelDiameterMm:c.wheelMm, gear:c.gear, motorsPerWheel:1};
+  },
+  /* Engine parameters for a robot at this pose (metres, radians). The Shot
+     Sim keeps an 18 in robot's centre 9 in off the walls; the bench's own
+     collisions already keep this robot on the field, so meet it there. */
+  params(pose){
+    const c=this.cfg, L=Field.data.field.field.half-9;
+    const x=Math.max(-L,Math.min(L,pose.x/IN)), y=Math.max(-L,Math.min(L,pose.y/IN));
+    return {robot:{x, y}, target:this.target(), ballId:c.ball,
+      hiveState:{red:Field.hive.red, blue:Field.hive.blue}, h0:c.h0In,
+      motorId:c.motorId, shooter:this.shooterSpec()};
+  },
+  /* Exit speed with the flywheel at full free speed, and the motor behind it. */
+  full(){
+    const c=this.cfg;
+    const key=[c.motorId,c.type,c.wheelMm,c.gear,c.ball].join("|");
+    if(this._full&&this._fullKey===key) return this._full;
+    let m=null;
+    try{ m=Field.E.motorModel(c.motorId, this.shooterSpec(), c.ball, 1); }catch(e){ m=null; }
+    this._full=m?{v:m.vCap, rpm:m.usableFreeRpm, free:m.freeRpm}:{v:0, rpm:0, free:0};
+    this._fullKey=key;
+    return this._full;
+  },
+  /* How fast the flywheel is turning, as a share of free speed — what the
+     code's setPower / setVelocity asked for, after the motor slews there. */
+  spin(){
+    const s=this.cfg&&this.cfg.shooter&&Sim.dev[this.cfg.shooter];
+    return s?Math.min(1,Math.abs(s.act)):0;
+  },
+  /* Commanded share of the nominal free speed, capped at what the battery
+     can actually turn the motor at. */
+  exitSpeed(){ const f=this.full(); return f.rpm?f.v*Math.min(1,this.spin()*f.free/f.rpm):0; },
+  yawDeg(pose){ return pose.h*180/Math.PI+(this.cfg.mountDeg||0); },
+
+  /* Fire one ball with the robot exactly as it is. */
+  fire(pose,why){
+    if(!Field.ok||!this.cfg) return null;
+    const v=this.exitSpeed();
+    if(!this.cfg.shooter) return this.note("No shooter motor picked — choose one in the Shot tab.");
+    if(v<1) return this.note("Flywheel isn't spinning — "+this.cfg.shooter+" is at "+Math.round(this.spin()*100)+"%.");
+    const r=Field.E.classifyShot(this.params(pose), this.cfg.hoodDeg, v, this.yawDeg(pose));
+    return this.launchPath(r, v, why||"fired");
+  },
+  /* A demonstration shot: the engine's best arc from here, perfectly aimed. */
+  fireBest(pose){
+    if(!Field.ok||!this.cfg) return null;
+    const r=Field.E.evaluate(this.params(pose),"coarse");
+    if(!r.best) return this.note("No arc from here reaches the "+this.target().toUpperCase()+" up-CELL.");
+    const c=Field.E.classifyShot(this.params(pose), r.best.thetaDeg, r.best.v, r.best.yawDeg);
+    return this.launchPath(c, r.best.v, "best shot");
+  },
+  launchPath(r,v,why){
+    const ball=this.cfg.ball, path=r.path||[];
+    if(path.length<2) return null;
+    const b={path, t:0, dur:(path.length-1)*SHOT_STEP_S, hit:!!r.hit, cause:r.cause, kind:ball,
+             color:ball==="nectar"?this.target():null, al:this.target(), v, why, pos:path[0].slice()};
+    this.flying.push(b); this.fired++;
+    return b;
+  },
+  note(text){ this.log.unshift({t:Sim.t||0, text}); this.log.length=Math.min(this.log.length,6); return null; },
+
+  /* The feeder decides when a ball goes: a servo moving off its rest
+     position pushes one ball; a feed motor running pushes one per interval. */
+  autoFire(pose){
+    const c=this.cfg; if(!c||!c.feeder) return;
+    const f=Sim.dev[c.feeder]; if(!f) return;
+    let pulse=false;
+    if(f.kind==="servo"){
+      const away=Math.abs(f.act-(f.restPos==null?f.cmd:f.restPos))>=0.12;
+      pulse=away&&!this.feedWas; this.feedWas=away;
+    }else{
+      const on=Math.abs(f.act)>0.35;
+      if(on&&this.t-this.lastFeed>=0.5){ pulse=true; this.lastFeed=this.t; }
+      if(!on) this.lastFeed=-1e9;
+    }
+    if(pulse) this.fire(pose,"fed by "+c.feeder);
+  },
+  tick(dt,pose){
+    this.t+=dt;
+    if(Field.ok&&this.cfg&&Sim.phase==="running") this.autoFire(pose);
+    for(const b of this.flying){
+      b.t+=dt;
+      const k=Math.min(b.path.length-1, b.t/SHOT_STEP_S), i=Math.floor(k), f=k-i;
+      const a=b.path[i], c=b.path[Math.min(b.path.length-1,i+1)];
+      b.pos=[a[0]+(c[0]-a[0])*f, a[1]+(c[1]-a[1])*f, a[2]+(c[2]-a[2])*f];
+      if(b.t>=b.dur) b.done=true;
+    }
+    for(const b of this.flying.filter(b=>b.done)){
+      if(b.hit){
+        this.scored++;
+        const tipped=Field.addToCell(b.al,b.kind,b.color);
+        this.note(`IN the ${b.al.toUpperCase()} up-CELL at ${b.v.toFixed(1)} m/s`+(tipped?` — TIP ${Field.tips[b.al]}`:""));
+      }else{
+        this.note(`Missed — ${CAUSE_TEXT[b.cause]||b.cause||"no score"} at ${b.v.toFixed(1)} m/s`);
+        this.landed.push({pos:b.pos.slice(), vz:0, t:0, kind:b.kind, color:b.color});
+      }
+    }
+    this.flying=this.flying.filter(b=>!b.done);
+    // a miss drops to the tiles and lies there a moment
+    for(const l of this.landed){
+      l.t+=dt;
+      if(l.pos[2]>1.4){ l.vz-=386*dt; l.pos[2]=Math.max(1.4,l.pos[2]+l.vz*dt); }
+    }
+    this.landed=this.landed.filter(l=>l.t<3);
+  },
+
+  /* What a hood fixed at this angle needs from here: the band of exit
+     speeds that score when aimed at `yawDeg`. */
+  window(pose,yawDeg){
+    const p=this.params(pose), th=this.cfg.hoodDeg, vmax=Math.max(3,Math.min(16,this.full().v||14));
+    let lo=null, hi=null;
+    for(let v=1.5; v<=vmax+1e-9; v+=0.1){
+      if(Field.E.classifyShot(p,th,v,yawDeg).hit){ if(lo===null) lo=v; hi=v; }
+    }
+    if(lo===null) return null;
+    const edge=(v0,dir)=>{ let v=v0; for(let i=0;i<10;i++){ const n=v+dir*0.01; if(!Field.E.classifyShot(p,th,n,yawDeg).hit) break; v=n; } return v; };
+    return {lo:edge(lo,-1), hi:edge(hi,1)};
+  }
+};
+const CAUSE_TEXT={short:"fell short", long:"went long", lip:"hit the lip", roof:"hit the CELL roof", cell:"hit the CELL",
+  frame:"hit the HIVE frame", wall:"hit the wall", floor:"hit the floor"};
+
+/* The goBILDA motor in the Shot Sim's table nearest a free speed. */
+function nearestMotorId(rpm){
+  const list=(Field.data&&Field.data.motors&&Field.data.motors.motors)||[];
+  let best=null, bd=1e9;
+  for(const m of list){ const d=Math.abs(Math.log((m.freeRpm||1)/(rpm||6000))); if(d<bd){ bd=d; best=m.id; } }
+  return best;
+}
+
 // ---- src/sim.js ----
 /* ============================================================
    7.  SIMULATION  — interprets the statement tree
@@ -2786,6 +4931,9 @@ const Sim={
     const sp=(opts&&opts.startPose)||{x:0,y:0,h:0};
     this.chassis={x:sp.x,y:sp.y,h:sp.h};
     this.code=code; this.cad=cad; this.map=map; this.opts=opts;
+    this.footprint=footprintOf(cad,opts&&opts.front);
+    this.obstacles=Field.ok?Field.obstacles(this.footprint.h):[];
+    this.bump=null;
     this.pc=0; this.sleepEnd=null; this.sleptMs=0; this.autoDone=false;
     for(const d of code.devices){
       const mech=cad.mechs.filter(m=>m.id===map[d.name])[0]||null;
@@ -2901,7 +5049,8 @@ const Sim={
            here would double-count it — a robot told to drive forward would
            spin. It's tracked for reporting instead. */
         if(st.op==="setPosition") s.cmd=clamp01(v);
-        else s.cmd=Math.max(-1,Math.min(1,st.op==="setVelocity"?v/1000:v));
+        else if(st.op==="setVelocity") s.cmd=Math.max(-1,Math.min(1,v/((s.spec.rpm||300)/60*s.tpr)));   // ticks/s → share of free speed
+        else s.cmd=Math.max(-1,Math.min(1,v));
       }else if(st.kind==="pidnew"){
         const a=st.args.map(x=>evalNode(x,env));
         this.pidOp(st.obj,"setPID",a);
@@ -2994,6 +5143,7 @@ const Sim={
       s.act=want;
     }
     this.driveChassis(dt);
+    Shots.tick(dt,this.chassis);
   },
   driveChassis(dt){
     const dtn=this.drivetrain;
@@ -3015,7 +5165,8 @@ const Sim={
     this.chassis.h += w*dt;
     this.chassis.x += (v*Math.cos(this.chassis.h) - strafe*SPEED*Math.sin(this.chassis.h))*dt;
     this.chassis.y += (v*Math.sin(this.chassis.h) + strafe*SPEED*Math.cos(this.chassis.h))*dt;
-    const LIM=1.78;                            // half an FTC field
+    if(Field.ok){ this.bump=Field.collide(this.chassis,this.footprint,this.obstacles); return; }
+    const LIM=1.78;                            // half a nominal 12 ft field
     this.chassis.x=Math.max(-LIM,Math.min(LIM,this.chassis.x));
     this.chassis.y=Math.max(-LIM,Math.min(LIM,this.chassis.y));
   }
@@ -3025,8 +5176,11 @@ const SLEW=8;                                   // motor power change per second
 
 // ---- src/view3d.js ----
 /* ============================================================
-   8.  3D VIEW — articulated, driven by the sim
+   8.  3D VIEW — the BIOBUZZ field and the articulated robot, driven by the sim
    ============================================================ */
+const FIELD_COL={tile:0x2d333a, seam:0x454e59, ground:0x0c1117, alu:0xa4aeb9, rail:0x7f8a96, poly:0xaac4de,
+  red:0xe0453c, blue:0x2f7dea, redTape:0xd8372f, blueTape:0x2a6ad8, pollen:0xf2c230, flower:0xdfe5eb,
+  arm:0x4d5661, logo:0x1b2129};
 const View={
   init(el){
     this.el=el;
@@ -3036,6 +5190,8 @@ const View={
     this.ren.setPixelRatio(Math.min(devicePixelRatio,2));
     this.ren.setClearColor(0x000000,0);
     el.appendChild(this.ren.domElement);
+    this.scene.add(new THREE.HemisphereLight(0xe4ecf5,0x1c222a,0.95));
+    const sun=new THREE.DirectionalLight(0xffffff,0.7); sun.position.set(-2.5,6,4); this.scene.add(sun);
     this.world=new THREE.Group(); this.scene.add(this.world);
     this.theta=-0.7; this.phi=1.15; this.rad=0.95; this.size=0.5;
     this.bind(); this.resize();
@@ -3056,44 +5212,40 @@ const View={
   resize(){ const w=this.el.clientWidth,h=this.el.clientHeight; if(!w||!h) return;
     this.cam.aspect=w/h; this.cam.updateProjectionMatrix(); this.ren.setSize(w,h,false); },
 
-  /* world (Z-up, metres) → view (Y-up) */
+  /* robot CAD (Z-up, metres) → view (Y-up), centred on the CAD box */
   v3(p){ return new THREE.Vector3(p[0]-this.c[0], p[2]-this.c[2], -(p[1]-this.c[1])); },
   vAxis(a){ return new THREE.Vector3(a[0],a[2],-a[1]).normalize(); },
+  /* field frame (inches, Z-up) → view */
+  fv(p){ return new THREE.Vector3(p[0]*IN, p[2]*IN+this.floorY, -p[1]*IN); },
 
   load(cad){
-    while(this.world.children.length) this.world.remove(this.world.children[0]);
+    while(this.world.children.length){ const o=this.world.children[0]; this.world.remove(o); this.dispose(o); }
     const bb=cad.bbox;
     this.c=[0,1,2].map(i=>(bb.min[i]+bb.max[i])/2);
     const size=Math.max(bb.max[0]-bb.min[0],bb.max[1]-bb.min[1],bb.max[2]-bb.min[2])||0.5;
     this.size=size; this.cad=cad;
-
-    // ---- the FTC field: 12 ft square, 6 × 6 foam tiles, perimeter wall
-    const FIELD=3.6576, WALL=0.31;
-    const floorY=bb.min[2]-this.c[2];
-    this.floorY=floorY;
-    const floor=new THREE.Mesh(new THREE.PlaneGeometry(FIELD,FIELD),
-      new THREE.MeshBasicMaterial({color:0x252c35}));
-    floor.rotation.x=-Math.PI/2; floor.position.y=floorY-0.003;
-    this.world.add(floor);
-    const seams=new THREE.GridHelper(FIELD,6,0x4a5664,0x4a5664);
-    seams.position.y=floorY;
-    this.world.add(seams);
-    const wall=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(FIELD,WALL,FIELD)),
-      new THREE.LineBasicMaterial({color:0x5b6776}));
-    wall.position.y=floorY+WALL/2;
-    this.world.add(wall);
-    // a start mark under the robot's home position
-    const ring=new THREE.Mesh(new THREE.RingGeometry(size*0.62,size*0.66,48),
-      new THREE.MeshBasicMaterial({color:0x4D9FFF,transparent:true,opacity:0.35,side:THREE.DoubleSide}));
-    ring.rotation.x=-Math.PI/2; ring.position.y=floorY+0.002;
-    this.world.add(ring);
-    this.fieldSize=FIELD;
+    this.floorY=bb.min[2]-this.c[2];
     this.look=new THREE.Vector3(0,0,0);
+
+    this.fieldG=new THREE.Group(); this.world.add(this.fieldG);
+    this.hiveG={}; this.shownHive=null; this.tipAnim=null; this.shownCells=-1;
+    if(Field.ok) this.buildField(); else this.buildPlainField();
+    this.dynG=new THREE.Group(); this.world.add(this.dynG);
+    this.ballPool=[]; this.arcLine=null;
 
     // ---- chassis group carries everything that drives around
     this.chassisG=new THREE.Group(); this.world.add(this.chassisG);
+    this.frontG=new THREE.Group(); this.chassisG.add(this.frontG);
+    this.front=null;
+    this.buildRobot(cad);
+    this.footG=null;
+    this.rad=size*1.9;
+    this.baseY=this.floorY;
+  },
+  turretScale:0.55, alliance:"red",
 
-    const M=cad.mechs;
+  buildRobot(cad){
+    const bb=cad.bbox, size=this.size, M=cad.mechs;
     const distSeg=(p,a,b)=>{
       const ab=[b[0]-a[0],b[1]-a[1],b[2]-a[2]];
       const L2=ab[0]*ab[0]+ab[1]*ab[1]+ab[2]*ab[2];
@@ -3154,7 +5306,7 @@ const View={
     };
 
     const chasP=mkPoints(groups.chassis,[0.50,0.60,0.72]);
-    if(chasP) this.chassisG.add(chasP);
+    if(chasP) this.frontG.add(chasP);
 
     /* ---- build the hierarchy from the rig, whatever shape it is ---- */
     const COL={"revolute-lift":0x4D9FFF,"revolute-yaw":0xE0A42E,"effector":0x3FB68B,
@@ -3192,20 +5344,254 @@ const View={
       }
       for(const k of rigKids(M,mech.id)) buildLink(k,inv);
     };
-    for(const r of rigRoots(M)) buildLink(r,this.chassisG);
+    for(const r of rigRoots(M)) buildLink(r,this.frontG);
 
     this.groupCounts={chassis:groups.chassis.length};
     M.forEach(m=>this.groupCounts[m.id]=(groups[m.id]||[]).length);
-    this.rad=size*1.9;
-    this.baseY=bb.min[2]-this.c[2];
   },
-  turretScale:0.55,
+
+  /* The footprint the collisions use, and an arrow for the drive base's forward. */
+  buildFootprint(fp){
+    if(this.footG) this.chassisG.remove(this.footG);
+    const g=new THREE.Group(), y=this.floorY+0.004;
+    const pts=[[fp.hx,fp.hy],[fp.hx,-fp.hy],[-fp.hx,-fp.hy],[-fp.hx,fp.hy],[fp.hx,fp.hy]]
+      .map(p=>new THREE.Vector3(p[0],y,-p[1]));
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({color:0x9fb3c8,transparent:true,opacity:0.55})));
+    const a=Math.min(fp.hx,fp.hy)*0.45;
+    const tri=new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(fp.hx+a*0.9,y,0), new THREE.Vector3(fp.hx+0.01,y,-a*0.6), new THREE.Vector3(fp.hx+0.01,y,a*0.6)]);
+    g.add(new THREE.Mesh(tri,new THREE.MeshBasicMaterial({color:0x9fb3c8,transparent:true,opacity:0.7,side:THREE.DoubleSide})));
+    this.footG=g; this.fpShown=fp.hx+"|"+fp.hy;
+    this.chassisG.add(g);
+  },
+
+  /* ---------------- the field ---------------- */
+  buildPlainField(){
+    const FIELD=3.6576, WALL=0.31, y=this.floorY;
+    const floor=new THREE.Mesh(new THREE.PlaneGeometry(FIELD,FIELD),new THREE.MeshBasicMaterial({color:0x252c35}));
+    floor.rotation.x=-Math.PI/2; floor.position.y=y-0.003; this.fieldG.add(floor);
+    const seams=new THREE.GridHelper(FIELD,6,0x4a5664,0x4a5664); seams.position.y=y; this.fieldG.add(seams);
+    const wall=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(FIELD,WALL,FIELD)),
+      new THREE.LineBasicMaterial({color:0x5b6776}));
+    wall.position.y=y+WALL/2; this.fieldG.add(wall);
+    this.fieldSize=FIELD;
+  },
+  mat(c,o){ o=o||{}; return new THREE.MeshStandardMaterial(Object.assign({color:c, roughness:0.62, metalness:0.1},o)); },
+  flat(c,op){ return new THREE.MeshBasicMaterial({color:c, transparent:op<1, opacity:op, depthWrite:op>=1,
+    polygonOffset:true, polygonOffsetFactor:-2, polygonOffsetUnits:-2}); },
+  box(g,center,size,mat){ // inches, field frame, size [x,y,z]
+    const m=new THREE.Mesh(new THREE.BoxGeometry(size[0]*IN,size[2]*IN,size[1]*IN),mat);
+    m.position.copy(this.fv(center)); g.add(m); return m;
+  },
+  rod(g,a,b,r,mat,seg){
+    const va=this.fv(a), vb=this.fv(b), len=va.distanceTo(vb); if(len<1e-6) return null;
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(r*IN,r*IN,len,seg||10),mat);
+    m.position.copy(va).add(vb).multiplyScalar(0.5);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),vb.clone().sub(va).normalize());
+    g.add(m); return m;
+  },
+  rect(g,x0,x1,y0,y1,mat,lift){ // a flat rectangle on the tiles
+    const m=new THREE.Mesh(new THREE.PlaneGeometry((x1-x0)*IN,(y1-y0)*IN),mat);
+    m.rotation.x=-Math.PI/2; m.position.copy(this.fv([(x0+x1)/2,(y0+y1)/2,lift||0.03])); g.add(m); return m;
+  },
+  ball(kind,color){
+    const r=(kind==="nectar"?1.81:1.4)*IN;
+    const c=kind==="nectar"?(color==="blue"?FIELD_COL.blue:FIELD_COL.red):FIELD_COL.pollen;
+    const key=kind+"|"+c;
+    this._ballGeo=this._ballGeo||{}; this._ballMat=this._ballMat||{};
+    if(!this._ballGeo[kind]) this._ballGeo[kind]=new THREE.SphereGeometry(r,18,12);
+    if(!this._ballMat[key]) this._ballMat[key]=this.mat(c,{roughness:0.5});
+    const m=new THREE.Mesh(this._ballGeo[kind],this._ballMat[key]);
+    m.userData.shared=true;              // geometry and material are reused: never dispose them
+    return m;
+  },
+  dispose(obj){
+    obj.traverse(o=>{ if(o.userData.shared) return;
+      if(o.geometry) o.geometry.dispose();
+      if(o.material){ if(o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+  },
+  label(g,text,x,y,rot,w,color){
+    const cv=document.createElement("canvas"); cv.width=512; cv.height=64;
+    const ctx=cv.getContext("2d");
+    ctx.font="600 40px 'Barlow Semi Condensed', 'Arial Narrow', sans-serif";
+    ctx.fillStyle=color||"#8a97a6"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(text,256,34);
+    const tex=new THREE.CanvasTexture(cv);
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(w*IN,w/8*IN),
+      new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));
+    m.rotation.x=-Math.PI/2; m.rotation.z=rot||0;
+    m.position.copy(this.fv([x,y,0.05])); g.add(m);
+  },
+
+  buildField(){
+    const D=Field.data.field, F=D.field, H=F.half, g=this.fieldG, WH=F.wallHeight, WT=F.wallThickness||1;
+    this.fieldSize=2*H*IN;
+
+    // venue floor, alliance areas, labels
+    const ground=new THREE.Mesh(new THREE.PlaneGeometry(60,60),new THREE.MeshBasicMaterial({color:FIELD_COL.ground}));
+    ground.rotation.x=-Math.PI/2; ground.position.y=this.floorY-0.004; g.add(ground);
+    for(const al of ["red","blue"]){
+      const a=D.allianceAreas[al], col=al==="red"?FIELD_COL.redTape:FIELD_COL.blueTape;
+      this.rect(g,a.x0,a.x1,a.y0,a.y1,this.flat(col,0.10),0.01);
+      const edge=this.flat(col,0.8), outer=al==="red"?a.x0:a.x1;
+      this.rect(g,a.x0,a.x1,a.y0,a.y0+2,edge,0.02); this.rect(g,a.x0,a.x1,a.y1-2,a.y1,edge,0.02);
+      this.rect(g,Math.min(outer,outer-(al==="red"?-2:2)),Math.max(outer,outer-(al==="red"?-2:2)),a.y0,a.y1,edge,0.02);
+      this.label(g,al.toUpperCase()+" ALLIANCE",(al==="red"?-1:1)*(H+14),0,al==="red"?-Math.PI/2:Math.PI/2,40,al==="red"?"#e0746c":"#6e9ff0");
+      // the NECTAR tray each alliance starts with
+      this.box(g,[(al==="red"?-1:1)*(H+30),0,1],[5,20,2],this.mat(0x2a3139));
+      for(let i=0;i<5;i++){ const b=this.ball("nectar",al); b.position.copy(this.fv([(al==="red"?-1:1)*(H+30),-7.2+i*3.6,3.9])); g.add(b); }
+    }
+    this.label(g,"AUDIENCE",0,-H-12,0,34,"#7d8a99");
+
+    // foam tiles and their seams
+    const tiles=new THREE.Mesh(new THREE.PlaneGeometry(2*H*IN,2*H*IN),this.mat(FIELD_COL.tile,{roughness:0.96,metalness:0}));
+    tiles.rotation.x=-Math.PI/2; tiles.position.y=this.floorY; g.add(tiles);
+    const sp=[], yS=this.floorY+0.001;
+    for(const s of F.tileSeams||[]){
+      sp.push(s*IN,yS,-H*IN, s*IN,yS,H*IN, -H*IN,yS,-s*IN, H*IN,yS,-s*IN);
+    }
+    const sg=new THREE.BufferGeometry(); sg.setAttribute("position",new THREE.Float32BufferAttribute(sp,3));
+    g.add(new THREE.LineSegments(sg,new THREE.LineBasicMaterial({color:FIELD_COL.seam})));
+
+    // perimeter: polycarbonate panels on aluminium, a post at every seam
+    const poly=this.mat(FIELD_COL.poly,{transparent:true,opacity:0.13,roughness:0.15,depthWrite:false,side:THREE.DoubleSide});
+    const alu=this.mat(FIELD_COL.alu,{metalness:0.55,roughness:0.38});
+    const rail=this.mat(FIELD_COL.rail,{metalness:0.45,roughness:0.5});
+    const L=2*H+2*WT, o=H+WT/2;
+    for(const w of [[0,o,L,WT],[0,-o,L,WT],[o,0,WT,2*H],[-o,0,WT,2*H]]){
+      this.box(g,[w[0],w[1],WH/2],[w[2],w[3],WH],poly);
+      this.box(g,[w[0],w[1],WH-0.5],[w[2]+0.01,w[3]+0.3,1],alu);
+      this.box(g,[w[0],w[1],0.75],[w[2]+0.01,w[3]+0.3,1.5],rail);
+    }
+    const posts=[-H,-47,-23.5,0,23.5,47,H];
+    for(const p of posts) for(const s of [-1,1]){
+      this.box(g,[p,s*o,WH/2],[1.2,WT+0.4,WH],alu);
+      this.box(g,[s*o,p,WH/2],[WT+0.4,1.2,WH],alu);
+    }
+
+    // tape: LOADING ZONES (outline, open to the wall) and GARDENS (a strip)
+    const T=2;
+    for(const al of ["red","blue"]){
+      const z=D.loadingZones[al], m=this.flat(al==="red"?FIELD_COL.redTape:FIELD_COL.blueTape,0.95);
+      const inner=al==="red"?z.x1:z.x0, s=al==="red"?-1:1;
+      this.rect(g,Math.min(inner,inner+s*T),Math.max(inner,inner+s*T),z.y0,z.y1,m);
+      this.rect(g,z.x0,z.x1,z.y0,z.y0+T,m); this.rect(g,z.x0,z.x1,z.y1-T,z.y1,m);
+      const gd=D.gardens[al];
+      this.rect(g,gd.x0,gd.x1,gd.y0,gd.y1,m);
+      // four POLLEN staged in a line in the GARDEN corner
+      const cx=al==="red"?-H+1.5:H-1.5, cy=al==="red"?-H+1.5:H-1.5;
+      for(let i=0;i<4;i++){ const b=this.ball("pollen"); b.position.copy(this.fv([cx-s*i*2.9,cy,1.4])); g.add(b); }
+    }
+
+    // FLOWERs: rings on four pipes, POLLEN stacked inside from the tile
+    const fm=this.mat(FIELD_COL.flower,{roughness:0.45});
+    for(const fl of D.flowers){
+      const ax=[fl.x,fl.y], R=fl.openingDia/2+0.25;
+      const ring=(z,r,tube)=>{ const t=new THREE.Mesh(new THREE.TorusGeometry(r*IN,tube*IN,8,28),fm);
+        t.rotation.x=Math.PI/2; t.position.copy(this.fv([ax[0],ax[1],z])); g.add(t); };
+      ring(fl.openingZ,R,0.3); ring(4,R,0.3); ring(0.25,R,0.25);
+      for(let k=0;k<4;k++){ const a=Math.PI/4+k*Math.PI/2;
+        this.rod(g,[ax[0]+Math.cos(a)*R,ax[1]+Math.sin(a)*R,0],[ax[0]+Math.cos(a)*R,ax[1]+Math.sin(a)*R,fl.openingZ],0.3,fm,8); }
+      const n=fl.wall==="+y"?[0,1]:fl.wall==="-y"?[0,-1]:fl.wall==="+x"?[1,0]:[-1,0];
+      const bs=[ax[0]+n[0]*(R+0.2),ax[1]+n[1]*(R+0.2),(fl.openingZ+fl.backstopTopZ)/2];
+      this.box(g,bs,n[0]?[0.3,fl.openingDia,fl.backstopTopZ-fl.openingZ+0.3]:[fl.openingDia,0.3,fl.backstopTopZ-fl.openingZ+0.3],fm);
+      for(let i=0;i<4;i++){ const b=this.ball("pollen"); b.position.copy(this.fv([ax[0],ax[1],1.4+i*2.8])); g.add(b); }
+    }
+
+    // HIVE frame: two leaning A-frames joined by a crossbar
+    const fr=Field.model().frame, frame=this.mat(FIELD_COL.alu,{metalness:0.55,roughness:0.4});
+    for(const s of fr.legs) this.rod(g,s[0],s[1],fr.tubeRadius,frame,8);
+    this.rod(g,fr.crossbar[0],fr.crossbar[1],fr.tubeRadius,frame,8);
+    if(fr.cornerBlocks) for(const s of fr.cornerBlocks.segments) this.rod(g,s[0],s[1],fr.cornerBlocks.radius,frame,10);
+    if(fr.footBars) for(const s of fr.footBars.segments){
+      const len=Math.hypot(s[1][0]-s[0][0],s[1][1]-s[0][1]);
+      this.box(g,[(s[0][0]+s[1][0])/2,(s[0][1]+s[1][1])/2,0.5],[fr.footBars.width,len,1],frame);
+    }
+    if(fr.logoPanels) for(const q of fr.logoPanels.quads){
+      const geo=new THREE.BufferGeometry().setFromPoints([q[0],q[1],q[2],q[0],q[2],q[3]].map(p=>this.fv(p)));
+      geo.computeVertexNormals();
+      g.add(new THREE.Mesh(geo,this.mat(FIELD_COL.logo,{side:THREE.DoubleSide,roughness:0.8})));
+    }
+  },
+
+  /* The two HIVE arms with their CELLs, for the current state. Each lives in
+     a group at its pivot so a TIP can swing it. */
+  buildHive(al){
+    if(this.hiveG[al]){ this.world.remove(this.hiveG[al]); this.dispose(this.hiveG[al]); }
+    const hm=Field.model(), h=hm.hives.filter(x=>x.alliance===al)[0];
+    const pz=Field.data.field.hive.pivotZ, piv=this.fv([h.hx,0,pz]);
+    const G=new THREE.Group(); G.position.copy(piv); this.world.add(G);
+    const inner=new THREE.Group(); inner.position.copy(piv.clone().multiplyScalar(-1)); G.add(inner);
+    const col=al==="red"?FIELD_COL.red:FIELD_COL.blue;
+    const armM=this.mat(FIELD_COL.arm,{metalness:0.4,roughness:0.5});
+    for(let i=0;i+1<h.armBar.length;i++) this.rod(inner,h.armBar[i],h.armBar[i+1],h.armRadius,armM,8);
+    this.rod(inner,[h.hx-1.6,0,pz],[h.hx+1.6,0,pz],1.3,armM,14);
+    for(const cell of h.cells){
+      const up=cell.role==="up", v=cell.vertices.map(p=>this.fv(p));
+      const pos=[], idx=[];
+      v.forEach(q=>pos.push(q.x,q.y,q.z));
+      for(let i=0;i<5;i++){ const j=(i+1)%5; idx.push(i,j,5+j, i,5+j,5+i); }
+      idx.push(0,1,2, 0,2,3, 0,3,4);
+      const geo=new THREE.BufferGeometry();
+      geo.setAttribute("position",new THREE.Float32BufferAttribute(pos,3)); geo.setIndex(idx); geo.computeVertexNormals();
+      inner.add(new THREE.Mesh(geo,this.mat(col,{transparent:true,opacity:up?0.46:0.30,side:THREE.DoubleSide,depthWrite:false,roughness:0.35})));
+      const lp=[]; const seg=(a,b)=>lp.push(v[a].x,v[a].y,v[a].z,v[b].x,v[b].y,v[b].z);
+      for(let k=0;k<5;k++){ seg(k,(k+1)%5); seg(5+k,5+(k+1)%5); seg(k,5+k); }
+      const lg=new THREE.BufferGeometry(); lg.setAttribute("position",new THREE.Float32BufferAttribute(lp,3));
+      inner.add(new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:col,transparent:true,opacity:up?0.95:0.6})));
+      // the mouth ring
+      const mouth=cell.mouth.concat([cell.mouth[0]]);
+      const ringM=this.mat(up?0xf4f7fa:col,{roughness:0.4, emissive:up?0x222222:0x000000});
+      for(let k=0;k+1<mouth.length;k++) this.rod(inner,mouth[k],mouth[k+1],Field.data.field.hive.cell.ringThickness+0.15,ringM,6);
+      if(up) this.fillCell(inner,cell,al);
+    }
+    this.hiveG[al]=G;
+  },
+  /* What's in an up-CELL, resting on its floor against the back wall,
+     from the alliance's side inward. */
+  fillCell(g,cell,al){
+    const list=Field.cells[al]; if(!list.length) return;
+    const V=cell.vertices;
+    const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], add=(a,b,k)=>[a[0]+b[0]*k,a[1]+b[1]*k,a[2]+b[2]*k];
+    const len=a=>Math.hypot(a[0],a[1],a[2]), nrm=a=>{ const l=len(a)||1; return [a[0]/l,a[1]/l,a[2]/l]; };
+    const across=nrm(sub(V[1],V[0])), depth=nrm(sub(V[5],V[0])), wide=len(sub(V[1],V[0]));
+    let up=[across[1]*depth[2]-across[2]*depth[1], across[2]*depth[0]-across[0]*depth[2], across[0]*depth[1]-across[1]*depth[0]];
+    const mid=V.slice(0,5).reduce((s,p)=>[s[0]+p[0]/5,s[1]+p[1]/5,s[2]+p[2]/5],[0,0,0]);
+    const toMid=sub(mid,V[0]); if(up[0]*toMid[0]+up[1]*toMid[1]+up[2]*toMid[2]<0) up=[-up[0],-up[1],-up[2]];
+    const fromHigh=al==="blue";          // start on the alliance-area side
+    let u=0.4, row=0;
+    for(const e of list){
+      const r=e.kind==="nectar"?1.81:1.4;
+      if(u+2*r>wide-0.4){ u=0.4; row++; }
+      const along=fromHigh?wide-u-r:u+r;
+      const p=add(add(add(V[0],across,along),depth,0.3+r+row*3.4),up,r+0.2);
+      const b=this.ball(e.kind,e.color); b.position.copy(this.fv(p)); g.add(b);
+      u+=2*r+0.15;
+    }
+  },
+
+  /* A path in field inches, drawn as a line: solid for your shot, dashed for
+     the best arc from here. */
+  setArc(path,color,dashed){
+    if(this.arcLine){ this.dynG.remove(this.arcLine); this.arcLine.geometry.dispose(); this.arcLine=null; }
+    if(!path||path.length<2||!this.dynG) return;
+    const geo=new THREE.BufferGeometry().setFromPoints(path.map(p=>this.fv(p)));
+    const mat=dashed?new THREE.LineDashedMaterial({color,dashSize:0.06,gapSize:0.045,transparent:true,opacity:0.85})
+                    :new THREE.LineBasicMaterial({color,transparent:true,opacity:0.95});
+    const line=new THREE.Line(geo,mat); if(dashed) line.computeLineDistances();
+    this.arcLine=line; this.dynG.add(line);
+  },
 
   update(){
     if(!this.cad) return;
     const ch=Sim.chassis;
     this.chassisG.position.set(ch.x, 0, -ch.y);
-    this.chassisG.rotation.y = -ch.h;
+    this.chassisG.rotation.y = ch.h;                     // CCW from +x, like the field frame
+    const front=(Sim.opts&&Sim.opts.front)||"+x";
+    if(front!==this.front){ this.front=front; this.frontG.rotation.y=FRONTS[front]||0; }
+    const fp=Sim.footprint;
+    if(fp&&(!this.footG||this.fpShown!==fp.hx+"|"+fp.hy)) this.buildFootprint(fp);
 
     for(const m of this.cad.mechs){
       if(!m._g) continue;
@@ -3232,10 +5618,49 @@ const View={
       };
       setL(J.a,1); setL(J.b,-1);
     }
+    if(Field.ok) this.updateField();
   },
+  updateField(){
+    // a TIP swings the arm 2 × armDeg about the pivot, then the new state is built
+    const now=performance.now();
+    if(this.tipAnim){
+      const A=this.tipAnim, k=Math.min(1,(now-A.t0)/420), e=k<0.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+      if(this.hiveG[A.al]) this.hiveG[A.al].rotation.x=A.angle*e;
+      if(k>=1){ this.tipAnim=null; this.shownHive=null; }
+    }
+    const key=Field.hive.red+","+Field.hive.blue;
+    if(!this.tipAnim&&(this.shownHive!==key||this.shownCells!==Field.version)){
+      const was=this.shownHive?this.shownHive.split(",").map(Number):null;
+      const al=was&&(was[0]!==Field.hive.red?"red":was[1]!==Field.hive.blue?"blue":null);
+      if(al&&this.hiveG[al]){
+        const from=al==="red"?was[0]:was[1];
+        const arm=Field.data.field.hive.armDeg*Math.PI/180;
+        this.tipAnim={al, t0:now, angle:2*arm*Math.sign(-from)};
+        this.shownHive=key; this.shownCells=-2;        // rebuild after the swing
+        // what was in the CELL spills as it goes down
+        for(const g of this.hiveG[al].children[0].children) if(g.userData.shared) g.visible=false;
+      }else{
+        this.buildHive("red"); this.buildHive("blue");
+        this.shownHive=key; this.shownCells=Field.version;
+      }
+    }
+    // balls in flight, and misses lying on the tiles
+    const want=Shots.flying.map(b=>b).concat(Shots.landed);
+    while(this.ballPool.length>want.length){ const m=this.ballPool.pop(); this.dynG.remove(m); }
+    for(let i=0;i<want.length;i++){
+      const b=want[i], key2=b.kind+"|"+(b.color||"");
+      let m=this.ballPool[i];
+      if(!m||m.userData.key!==key2){ if(m) this.dynG.remove(m); m=this.ball(b.kind,b.color); m.userData.key=key2; this.ballPool[i]=m; this.dynG.add(m); }
+      m.position.copy(this.fv(b.pos));
+    }
+  },
+
   setView(v){
     this.mode=v;
-    if(v==="field"){ this.theta=-Math.PI/2; this.phi=0.72; this.rad=(this.fieldSize||3.66)*1.2; return; }
+    if(v==="field"){
+      // from behind the alliance's own wall, where the drivers stand
+      this.theta=this.alliance==="blue"?0:Math.PI; this.phi=0.82; this.rad=(this.fieldSize||3.58)*1.5; return;
+    }
     if(v==="front"){ this.theta=-Math.PI/2; this.phi=Math.PI/2; }
     else if(v==="side"){ this.theta=0; this.phi=Math.PI/2; }
     else if(v==="top"){ this.theta=-Math.PI/2; this.phi=0.09; }
@@ -3246,7 +5671,8 @@ const View={
     if(!this.cam) return;
     // robot views follow the chassis as it drives; the field view holds still
     const target=new THREE.Vector3(0,0,0);
-    if(this.mode!=="field"&&this.chassisG) target.copy(this.chassisG.position);
+    if(this.mode==="field") target.set(this.alliance==="blue"?0.25:-0.25,(this.floorY||0)+0.3,0);
+    else if(this.chassisG) target.copy(this.chassisG.position);
     if(!this.look) this.look=target.clone();
     this.look.lerp(target,0.18);
     const r=this.rad;
@@ -3276,7 +5702,7 @@ const store={
 };
 
 let CODE=null, CAD=null, MAP={}, FINDINGS=[], activePad=2;
-const OPTS={payloadKg:0.180, duty:0.30, trust:"code", robotConfig:null};
+const OPTS={payloadKg:0.180, duty:0.30, trust:"code", robotConfig:null, front:"+x"};
 let IGNORED={};
 try{ IGNORED=JSON.parse(store.get("ftcbench.ignored","{}"))||{}; }catch(e){ IGNORED={}; }
 function saveIgnored(){ store.set("ftcbench.ignored",JSON.stringify(IGNORED)); }
@@ -3308,6 +5734,7 @@ function selectTab(nav,tab){
   store.set("ftcbench.tab."+nav.dataset.tabs,tab);
   if(tab==="graph") Graph.draw();
   if(tab==="compare") renderCompare();
+  if(tab==="shot"){ ShotUI.dirty=true; ShotUI.t=0; renderShotSetup(); }
 }
 const paneVisible=name=>{ const p=document.querySelector(`.pane[data-pane="${name}"]`); return p&&!p.hidden; };
 
@@ -3324,7 +5751,8 @@ function initLibrary(){
   LIBRARY=[
     {id:"sample-claw", file:"WORKSHOPCODE.java", source:SAMPLE_JAVA, builtin:true},
     {id:"sample-mecanum", file:"MecanumTeleOp.java", source:DRIVE_JAVA, builtin:true},
-    {id:"sample-auto", file:"TimedDriveAuto.java", source:AUTO_JAVA, builtin:true}
+    {id:"sample-auto", file:"TimedDriveAuto.java", source:AUTO_JAVA, builtin:true},
+    {id:"sample-shooter", file:"ShooterTeleOp.java", source:SHOOTER_JAVA, builtin:true}
   ];
   try{
     const saved=JSON.parse(store.get("ftcbench.library","[]"))||[];
@@ -3384,6 +5812,7 @@ function selectOpMode(id){
   analyzeAll();
   Sim.load(CODE,CAD,MAP,withPose());
   applyConfigOverrides(); Sim.init(); applyConfigOverrides();    // like a DS: selected and INIT'd, waiting for START
+  Shots.adopt(CODE); ShotUI.dirty=true; renderShotSetup();
   buildGauges(); renderPad(); Graph.reset(); renderConfigVars(); renderLegend3D();
   renderOpList(); renderOpSelect(); renderCompareSelects(); updateDS();
 }
@@ -3403,6 +5832,7 @@ function withPose(){ OPTS.startPose=Object.assign({x:0,y:0,h:0},Sim.chassis||{})
 function applyConfigOverrides(){ for(const k in CONFIG_OVR) Sim.vars[k]=CONFIG_OVR[k]; }
 function dsInit(){
   if(!CODE||Sim.phase==="running") return;
+  Field.reset(); Shots.reset(); ShotUI.dirty=true;       // a fresh match: HIVEs as staged
   Sim.load(CODE,CAD,MAP,withPose());
   applyConfigOverrides(); Sim.init(); applyConfigOverrides();
   buildGauges(); Graph.reset(); updateDS();
@@ -3673,7 +6103,7 @@ function renderDS(){
   }
   out+=`<div class="dshr">────────────────────</div>`;
   if(Sim.drivetrain&&Sim.drivetrain.ok)
-    out+=`<div><span class="dsk">pose</span> <span class="dsv">${Sim.chassis.x.toFixed(2)}, ${Sim.chassis.y.toFixed(2)} m · ${Math.round(Sim.chassis.h*180/Math.PI)}°</span></div>`;
+    out+=`<div><span class="dsk">pose</span> <span class="dsv">${poseText(Sim.chassis)}</span></div>`;
   if(Sim.sleptMs&&CODE.hasLoop) out+=`<div><span class="dsk">bench</span> <span class="dsbad">sleep() blocked the loop for ${Math.round(Sim.sleptMs)} ms so far</span></div>`;
   const st=Object.keys(Sim.dev).filter(k=>Sim.dev[k].stalled);
   out+=st.length?`<div><span class="dsk">bench</span> <span class="dsbad">stalled: ${esc(st.join(", "))}</span></div>`
@@ -3743,6 +6173,7 @@ function exportRig(){
     format:"ftc-sim-bench.rig", version:1,
     cad:(CAD&&CAD.name)||null, opmode:(CODE&&CODE.opmode)||null,
     trust:OPTS.trust, payloadKg:OPTS.payloadKg, duty:OPTS.duty, turretScale:View.turretScale,
+    front:OPTS.front, shot:Shots.cfg||null,
     joints:(CAD?CAD.mechs:[]).map(m=>({
       id:m.id, label:m.label||m.id, kind:m.kind, parent:m.parent, dir:m.dir||1,
       pivotMm:m.pivot?m.pivot.map(v=>+(v*1000).toFixed(1)):null,
@@ -3758,6 +6189,8 @@ function applyRig(r){
   if(typeof r.payloadKg==="number") OPTS.payloadKg=r.payloadKg;
   if(typeof r.duty==="number") OPTS.duty=r.duty;
   if(typeof r.turretScale==="number") View.turretScale=r.turretScale;
+  if(r.front&&FRONTS[r.front]!==undefined) OPTS.front=r.front;
+  if(r.shot&&typeof r.shot==="object") Shots.cfg=Object.assign(Shots.defaults(),r.shot);
   const byId={}; CAD.mechs.forEach(m=>byId[m.id]=m);
   for(const j of (r.joints||[])){
     let m=byId[j.id];
@@ -4187,6 +6620,178 @@ function renderCompare(){
 }
 
 /* ============================================================
+   SHOT — the BIOBUZZ Shot Sim, live from where the robot is
+   ============================================================ */
+const VERDICT_CLASS={"POSSIBLE":"pass","NOT CONSISTENT":"warn","WON'T WORK":"fail"};
+const VERDICT_HEX={"POSSIBLE":0x3FB68B,"NOT CONSISTENT":0xE0A42E,"WON'T WORK":0xE4574E};
+const ShotUI={key:null, still:0, t:0, dirty:true, full:false, res:null, win:null, preview:null, arc:true, arcKey:null};
+const wrap180=d=>((d%360)+540)%360-180;
+const poseText=c=>Field.ok
+  ? `x ${(c.x/IN).toFixed(1)} · y ${(c.y/IN).toFixed(1)} in · ${Math.round(wrap180(c.h*180/Math.PI))}°`
+  : `x ${c.x.toFixed(2)} m · y ${c.y.toFixed(2)} m · ${Math.round(c.h*180/Math.PI)}°`;
+function setHTML(el,html){ if(el&&el.innerHTML!==html) el.innerHTML=html; }
+function placeAtStart(){
+  const p=Field.ok?Field.startPose(Shots.alliance,footprintOf(CAD,OPTS.front)):{x:0,y:0,h:0};
+  Sim.chassis={x:p.x,y:p.y,h:p.h}; OPTS.startPose=Object.assign({},p);
+}
+function setAlliance(al,move){
+  Shots.alliance=al==="blue"?"blue":"red"; View.alliance=Shots.alliance; store.set("ftcbench.alliance",Shots.alliance);
+  if(View.mode==="field") View.setView("field");
+  if(move&&CAD&&Sim.phase!=="running") placeAtStart();
+  ShotUI.dirty=true; ShotUI.t=0; renderShotSetup();
+}
+/* Ticks per second at full speed for the flywheel as the code declares it,
+   so the advice comes out in the units setVelocity() takes. */
+function flywheelTicks(){
+  const s=Shots.cfg&&Shots.cfg.shooter&&Sim.dev[Shots.cfg.shooter];
+  return s?(s.spec.rpm||300)/60*s.tpr:2800;
+}
+function shotEvaluate(mode){
+  try{
+    const c=Sim.chassis;
+    ShotUI.res=Field.E.evaluate(Shots.params(c),mode);
+    ShotUI.win=paneVisible("shot")?Shots.window(c,ShotUI.res.best?ShotUI.res.best.yawDeg:ShotUI.res.psi0Deg):null;
+  }catch(e){ ShotUI.res=null; ShotUI.win=null; }
+}
+function shotTick(now){
+  if(!Field.ok||!Shots.cfg||!CAD) return;
+  const c=Sim.chassis;
+  const key=[(c.x/IN).toFixed(1),(c.y/IN).toFixed(1),Field.hive.red,Field.hive.blue,Shots.alliance,JSON.stringify(Shots.cfg)].join("|");
+  if(key!==ShotUI.key){ ShotUI.key=key; ShotUI.still=now; ShotUI.dirty=true; ShotUI.full=false; }
+  let fresh=false;
+  if(ShotUI.dirty&&now-ShotUI.t>=250){ shotEvaluate("coarse"); ShotUI.t=now; ShotUI.dirty=false; fresh=true; }
+  else if(!ShotUI.dirty&&!ShotUI.full&&now-ShotUI.still>=700){ shotEvaluate("full"); ShotUI.full=true; fresh=true; }
+  // what would happen if the robot fired right now
+  ShotUI.preview=null;
+  if(Shots.cfg.shooter&&Shots.spin()>0.1){
+    const v=Shots.exitSpeed();
+    if(v>=1) ShotUI.preview=Field.E.classifyShot(Shots.params(c),Shots.cfg.hoodDeg,v,Shots.yawDeg(c));
+  }
+  updateArc();
+  const sc=$("#shotCount"), r=ShotUI.res;
+  if(sc){ const k=r?VERDICT_CLASS[r.verdict]:""; sc.textContent=r?(k==="pass"?"✓":k==="warn"?"~":"✕"):""; sc.className="count"+(k==="fail"?" fail":k==="warn"?" warn":""); }
+  if(paneVisible("shot")){ if(fresh) renderShotVerdict(); renderShotLive(); renderHives(); renderShotLog(); }
+}
+function updateArc(){
+  let path=null, col=0, dashed=false;
+  if(ShotUI.arc){
+    if(ShotUI.preview){ path=ShotUI.preview.path; col=ShotUI.preview.hit?0x3FB68B:0xE4574E; }
+    // the best arc only when it's worth showing: a WON'T WORK "best" can be a 6 m lob
+    else if(ShotUI.res&&ShotUI.res.trajectory&&ShotUI.res.verdict!=="WON'T WORK"){
+      path=ShotUI.res.trajectory; col=VERDICT_HEX[ShotUI.res.verdict]||0x8595A8; dashed=true; }
+  }
+  const k=path?[path.length,path[0].join(","),path[path.length-1].join(","),col,dashed].join("|"):"";
+  if(k===ShotUI.arcKey) return;
+  ShotUI.arcKey=k; View.setArc(path,col,dashed);
+}
+function renderShotVerdict(){
+  const el=$("#shotVerdict"); if(!el) return;
+  if(!Field.ok){ el.className="verdict"; el.innerHTML=`<div class="vs">The BIOBUZZ field didn't load, so there is nothing to shoot at. Everything else on the bench works.</div>`; return; }
+  const r=ShotUI.res, c=Sim.chassis, al=Shots.target().toUpperCase();
+  if(!r){ el.className="verdict"; el.innerHTML=`<div class="vs">Working out the shot from here…</div>`; return; }
+  const b=r.best;
+  el.className="verdict "+(VERDICT_CLASS[r.verdict]||"");
+  el.innerHTML=`<div class="vhead"><span class="vw">${esc(r.verdict)}</span><span class="vr">${Math.round((r.hitRate||0)*100)}% score</span></div>
+    <div class="vs">From x ${(c.x/IN).toFixed(0)}, y ${(c.y/IN).toFixed(0)} in to the ${al} up-CELL, ${Math.round(r.distIn)} in away. ${esc(r.reason||"")}</div>
+    ${b?`<div class="vk"><div><b>${b.thetaDeg.toFixed(0)}°</b><span>launch</span></div><div><b>${b.v.toFixed(2)}</b><span>m/s exit</span></div><div><b>${r.motor?Math.round(r.motor.motorRpm).toLocaleString():"—"}</b><span>motor rpm</span></div></div>`:""}
+    ${(r.warnings||[]).map(w=>`<div class="vwarn">${esc(w.text)}</div>`).join("")}`;
+}
+function renderShotLive(){
+  const el=$("#shotLive"); if(!el||!Shots.cfg) return;
+  const cfg=Shots.cfg, full=Shots.full(), spin=Shots.spin(), c=Sim.chassis, out=[];
+  if(!cfg.shooter) out.push(`<div>No flywheel motor picked. Choose one below, or press Fire to see the best shot from here.</div>`);
+  else out.push(`<div><code>${esc(cfg.shooter)}</code> ${spin>0.01
+    ?`at <b>${Math.round(spin*100)}%</b> of free speed → ${Math.round(Math.min(full.rpm,spin*full.free)).toLocaleString()} rpm → <b>${Shots.exitSpeed().toFixed(2)} m/s</b>`
+    :"is stopped"+(Sim.phase==="running"?"":" — press START")}</div>`);
+  const w=ShotUI.win, T=flywheelTicks();
+  if(w&&full.v){
+    const sp=v=>v/full.v*full.rpm/full.free;           // exit speed → share of free speed
+    const band=(a,b)=>a===b?a:a+"–"+b;
+    out.push(`<div>At ${cfg.hoodDeg}° this spot scores from <b>${w.lo.toFixed(2)} to ${w.hi.toFixed(2)} m/s</b>: <code>setVelocity(${band(Math.round(sp(w.lo)*T),Math.round(sp(w.hi)*T))})</code> or power ${band(sp(w.lo).toFixed(2),sp(w.hi).toFixed(2))}.</div>`);
+  }else if(ShotUI.res&&paneVisible("shot")){
+    out.push(`<div>No flywheel speed scores from here at ${cfg.hoodDeg}°${ShotUI.res.best?` — the best arc from this spot leaves at ${ShotUI.res.best.thetaDeg.toFixed(0)}°`:""}.</div>`);
+  }
+  if(ShotUI.res&&ShotUI.res.best){
+    const d=wrap180(ShotUI.res.best.yawDeg-Shots.yawDeg(c));
+    out.push(Math.abs(d)<1.5?`<div>Aimed at the up-CELL.</div>`:`<div>Aim: turn <b>${Math.abs(d).toFixed(0)}° ${d>0?"left":"right"}</b>.</div>`);
+  }
+  if(ShotUI.preview) out.push(`<div>Fire now and it ${ShotUI.preview.hit?`<b class="ok">goes in</b>`:`<b class="bad">${esc(CAUSE_TEXT[ShotUI.preview.cause]||"misses")}</b>`}.</div>`);
+  setHTML(el,out.join(""));
+}
+function renderHives(){
+  const el=$("#hiveRows"); if(!el||!Field.ok) return;
+  const rows=["red","blue"].map(al=>{
+    const list=Field.cells[al], g=Field.grams(al);
+    const n={pollen:0,nectar:0}; list.forEach(e=>n[e.kind]++);
+    const what=list.length?[n.nectar?n.nectar+" NECTAR":"",n.pollen?n.pollen+" POLLEN":""].filter(Boolean).join(" + "):"empty";
+    const side=Field.hive[al]<0?"audience side":"far side";
+    return `<div class="hive-row"><div class="hive-top"><span class="al ${al}">${al.toUpperCase()}</span>
+      <span class="what">up-CELL on the ${side} · ${what}</span>
+      <button class="btn-sm" data-tip="${al}" title="Swing the ${al} HIVE over by hand">TIP</button></div>
+      <div class="tipbar"><i style="width:${Math.min(100,g/TIP_GRAMS*100).toFixed(0)}%"></i></div>
+      <div class="hive-sub"><span>${Math.round(g)} g of ~${TIP_GRAMS} g to TIP</span><span>${Field.tips[al]} TIP${Field.tips[al]===1?"":"s"} · ${Field.tips[al]*20} pts</span></div></div>`;
+  }).join("");
+  setHTML(el,rows);
+}
+function renderShotLog(){
+  const el=$("#shotLog"); if(!el) return;
+  const head=Shots.fired?`<div><span>this run</span>${Shots.fired} fired · ${Shots.scored} in</div>`:"";
+  setHTML(el,head+Shots.log.map(l=>`<div><span>${l.t.toFixed(1)} s</span>${esc(l.text)}</div>`).join(""));
+}
+function renderShotSetup(){
+  if(!$("#shotDev")) return;
+  $$("#allySeg button").forEach(b=>b.classList.toggle("on",b.dataset.al===Shots.alliance));
+  const cfg=Shots.cfg;
+  const fire=$("#fireBtn"); if(fire) fire.disabled=!Field.ok||!cfg;
+  if(!cfg||!Field.ok){ renderShotVerdict(); return; }
+  const devs=(CODE&&CODE.devices)||[];
+  const opt=(list,sel,none)=>[`<option value="">${none}</option>`].concat(list.map(d=>
+    `<option value="${esc(d.name)}"${d.name===sel?" selected":""}>${esc(d.name)}</option>`)).join("");
+  setHTML($("#shotDev"),opt(devs.filter(d=>/DcMotor/i.test(d.type||"")),cfg.shooter,"— none —"));
+  setHTML($("#shotFeed"),opt(devs.filter(d=>d.name!==cfg.shooter&&/Servo|DcMotor/i.test(d.type||"")),cfg.feeder,"— by hand (F) —"));
+  $$("#ballSeg button").forEach(b=>b.classList.toggle("on",b.dataset.ball===cfg.ball));
+  $$("#typeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.type===cfg.type));
+  $$("#mountSeg button").forEach(b=>b.classList.toggle("on",+b.dataset.mount===(cfg.mountDeg||0)));
+  $("#hoodSlider").value=cfg.hoodDeg; $("#hoodVal").textContent=cfg.hoodDeg+"°";
+  $("#h0Slider").value=cfg.h0In; $("#h0Val").textContent=cfg.h0In+" in";
+  const motors=Field.data.motors.motors;
+  setHTML($("#motorSel"),motors.map(m=>`<option value="${esc(m.id)}"${m.id===cfg.motorId?" selected":""}>${esc(m.label)}</option>`).join(""));
+  const wheels=Field.data.shooter.wheels;
+  setHTML($("#wheelSel"),wheels.map(w=>`<option value="${w.diameterMm}|${esc(w.id)}"${w.diameterMm===cfg.wheelMm&&(!cfg.wheelId||cfg.wheelId===w.id)?" selected":""}>${esc(w.label)}</option>`).join(""));
+  if(document.activeElement!==$("#gearIn")) $("#gearIn").value=cfg.gear;
+  renderShotVerdict(); renderShotLive(); renderHives(); renderShotLog();
+}
+function shotChanged(){ ShotUI.dirty=true; ShotUI.t=0; saveRig(); renderShotSetup(); }
+function shotFire(){
+  if(!Field.ok||!Shots.cfg) return;
+  if(Shots.cfg.shooter&&Shots.spin()>0.1) Shots.fire(Sim.chassis,"fired by hand");
+  else Shots.fireBest(Sim.chassis);
+  renderShotLog();
+}
+function wireShotTab(){
+  $("#fireBtn").addEventListener("click",shotFire);
+  $("#fieldReset").addEventListener("click",()=>{ Field.reset(); Shots.reset(); ShotUI.dirty=true; ShotUI.t=0; renderShotSetup(); });
+  $("#hiveRows").addEventListener("click",e=>{ const b=e.target.closest("[data-tip]"); if(!b) return; Field.tip(b.dataset.tip); ShotUI.dirty=true; ShotUI.t=0; renderHives(); });
+  $("#arcToggle").addEventListener("change",e=>{ ShotUI.arc=e.target.checked; store.set("ftcbench.arc",e.target.checked?"1":"0"); ShotUI.arcKey=null; updateArc(); });
+  $("#allySeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) setAlliance(b.dataset.al,true); });
+  const seg=(id,apply)=>$(id).addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b||!Shots.cfg) return; apply(b); shotChanged(); });
+  seg("#ballSeg",b=>Shots.cfg.ball=b.dataset.ball);
+  seg("#typeSeg",b=>Shots.cfg.type=b.dataset.type);
+  seg("#mountSeg",b=>Shots.cfg.mountDeg=+b.dataset.mount);
+  $("#hoodSlider").addEventListener("input",e=>{ if(!Shots.cfg) return; Shots.cfg.hoodDeg=+e.target.value; $("#hoodVal").textContent=e.target.value+"°"; ShotUI.dirty=true; saveRig(); });
+  $("#h0Slider").addEventListener("input",e=>{ if(!Shots.cfg) return; Shots.cfg.h0In=+e.target.value; $("#h0Val").textContent=e.target.value+" in"; ShotUI.dirty=true; saveRig(); });
+  $("#motorSel").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.motorId=e.target.value; shotChanged(); });
+  $("#wheelSel").addEventListener("change",e=>{ if(!Shots.cfg) return; const p=e.target.value.split("|"); Shots.cfg.wheelMm=+p[0]; Shots.cfg.wheelId=p[1]; shotChanged(); });
+  $("#gearIn").addEventListener("change",e=>{ if(!Shots.cfg) return; const v=parseFloat(e.target.value); if(isFinite(v)&&v>0) Shots.cfg.gear=Math.max(0.25,Math.min(4,v)); shotChanged(); });
+  $("#shotDev").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.shooter=e.target.value||null; Shots.cfg.motorId=nearestMotorId(Shots.deviceRpm()); shotChanged(); });
+  $("#shotFeed").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.feeder=e.target.value||null; shotChanged(); });
+  $("#frontSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    OPTS.front=b.dataset.front; Sim.footprint=footprintOf(CAD,OPTS.front);
+    Sim.obstacles=Field.ok?Field.obstacles(Sim.footprint.h):[];
+    syncOptionControls(); saveRig(); });
+}
+
+/* ============================================================
    ORCHESTRATION
    ============================================================ */
 function renderLegend3D(){
@@ -4223,16 +6828,18 @@ function syncOptionControls(){
   $("#massSlider").value=g; $("#massVal").textContent=g+" g";
   $("#dutySlider").value=d; $("#dutyVal").textContent=d+" %";
   $("#turretSlider").value=t; $("#turretVal").textContent=t+" %";
+  $$("#frontSeg button").forEach(b=>b.classList.toggle("on",b.dataset.front===OPTS.front));
 }
 function loadCAD(cad,label,cls){
   CAD=cad;
   $("#cadStatus").textContent=label; $("#cadDrop").className="drop "+(cls||"ok");
-  $("#vpTitle").textContent=(cad.name||label)+" · "+(cad.points?cad.points.length.toLocaleString():"0")+" pts · "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s");
+  $("#vpTitle").textContent=(cad.name||label)+" · "+(cad.points?cad.points.length.toLocaleString():"0")+" pts · "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s")+(Field.ok?" · BIOBUZZ field":"");
   const b=cad.bbox, mm=v=>(v*1000).toFixed(0);
   $("#vpDims").textContent=`${mm(b.max[0]-b.min[0])} × ${mm(b.max[1]-b.min[1])} × ${mm(b.max[2]-b.min[2])} mm`;
-  RIG_DEVICES={}; HW_USER={};
+  RIG_DEVICES={}; HW_USER={}; Shots.cfg=null; OPTS.front="+x";
   const restored=loadSavedRig();
   View.load(cad);
+  if(Sim.phase!=="running") placeAtStart();
   if(CODE){ MAP=autoMap(CODE.devices,CAD.mechs); applyDeviceMemory(); rebuild(); }
   if(restored) $("#cadStatus").textContent=label+" · rig restored";
   syncOptionControls();
@@ -4316,6 +6923,7 @@ function knobTo(axis,v){
 }
 addEventListener("keydown",e=>{
   if(typing(e)||e.ctrlKey||e.metaKey||e.altKey) return;
+  if(e.code==="KeyF"&&!e.repeat){ e.preventDefault(); shotFire(); return; }
   const sk=STICKKEYS[e.code];
   if(sk){ e.preventDefault(); Sim.pad[activePad][sk[0]]=sk[1]; knobTo(sk[0],sk[1]); return; }
   const b=KEYMAP[e.code]; if(!b) return;
@@ -4373,7 +6981,9 @@ function frame(now){
     const m=renderMech();
     if(m){ $("#mech").innerHTML=m.svg; $("#pipDeg").textContent=m.deg+"° off level"; }
     const c=Sim.chassis||{x:0,y:0,h:0};
-    $("#vpPose").textContent=`x ${c.x.toFixed(2)} m · y ${c.y.toFixed(2)} m · ${Math.round(c.h*180/Math.PI)}°`;
+    const zone=Field.ok?Field.zoneAt(c.x/IN,c.y/IN):null;
+    $("#vpPose").textContent=poseText(c)+(Sim.bump?` · against the ${Sim.bump}`:zone&&/LOADING|HIVE/.test(zone)?` · ${zone}`:"");
+    shotTick(now);
     const anyDown=Object.keys(Sim.pad[activePad]).some(k=>Sim.pad[activePad][k]);
     const tp=$("#tickPill");
     tp.textContent=Sim.phase==="running"?(anyDown?"commanding":"holding"):Sim.phase==="init"?"init positions":"idle";
@@ -4390,6 +7000,12 @@ function frame(now){
 (function boot(){
   setTheme(store.get("ftcbench.theme","dark")==="light"?"light":"dark");
   $("#themeBtn").addEventListener("click",()=>setTheme(currentTheme()==="dark"?"light":"dark"));
+  // the BIOBUZZ field and shot physics, from the vendored Shot Sim
+  Field.init(window.ShotEngine,window.SHOT_DATA);
+  let al=store.get("ftcbench.alliance","red");
+  try{ const qa=new URLSearchParams(location.search).get("alliance"); if(qa==="red"||qa==="blue") al=qa; }catch(e){}
+  Shots.alliance=View.alliance=al==="blue"?"blue":"red";
+  ShotUI.arc=store.get("ftcbench.arc","1")!=="0"; $("#arcToggle").checked=ShotUI.arc;
   View.init($("#viewport"));
   View.setView("iso");
   initTabs();
@@ -4471,7 +7087,8 @@ function frame(now){
   // stage & dock
   $("#viewSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
     $$("#viewSeg button").forEach(x=>x.classList.toggle("on",x===b)); View.setView(b.dataset.v); });
-  $("#resetPose").addEventListener("click",()=>{ Sim.chassis={x:0,y:0,h:0}; OPTS.startPose={x:0,y:0,h:0}; });
+  $("#resetPose").addEventListener("click",placeAtStart);
+  wireShotTab();
   $("#padSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
     activePad=+b.dataset.pad; $$("#padSeg button").forEach(x=>x.classList.toggle("on",x===b)); renderPad(); });
 
@@ -4492,6 +7109,13 @@ function frame(now){
   try{
     const q=new URLSearchParams(location.search);
     if(q.get("opmode")&&entry(q.get("opmode"))) selectOpMode(q.get("opmode"));
+    // ?pose=-40,-30,29 — a spot on the field in inches and a heading in degrees
+    const ps=(q.get("pose")||"").split(",").filter(s=>s!=="").map(Number);
+    if(ps.length>=2&&ps.every(isFinite)){
+      Sim.chassis={x:ps[0]*IN, y:ps[1]*IN, h:(ps[2]||0)*Math.PI/180};
+      if(Field.ok&&Sim.footprint) Field.collide(Sim.chassis,Sim.footprint,Sim.obstacles);
+      OPTS.startPose=Object.assign({},Sim.chassis);
+    }
     const v=q.get("view");
     if(v&&/^(iso|front|side|top|field)$/.test(v)){ View.setView(v); $$("#viewSeg button").forEach(x=>x.classList.toggle("on",x.dataset.v===v)); }
     ["left","right"].forEach(side=>{ const t=q.get(side), nav=$(`.tabs[data-tabs="${side}"]`);

@@ -13,7 +13,7 @@ const rd = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
 
 // Concatenation order matters: later files use functions and constants the
 // earlier ones define. The engine never touches the DOM; only view3d and app do.
-export const ORDER = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'robotconfig', 'compare', 'analyze', 'sim', 'view3d', 'app'];
+export const ORDER = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'robotconfig', 'compare', 'analyze', 'field', 'shots', 'sim', 'view3d', 'app'];
 
 // An inline script must never contain a literal closing script tag.
 const safe = (s) => s.replace(/<\/(script)/gi, '<\\/$1');
@@ -22,9 +22,15 @@ const js = '"use strict";\n' + ORDER.map((n) => `// ---- src/${n}.js ----\n${rd(
 const css = rd('src', 'styles.css');
 const markup = rd('src', 'markup.html');
 
+// The BIOBUZZ Shot Sim engine and its measured field, vendored by tools/sync-shot-sim.mjs.
+// Its own script tag: it's a UMD module that sets window.ShotEngine.
+const SHOT = path.join('vendor', 'biobuzz-shot-sim');
+const shotData = { field: JSON.parse(rd(SHOT, 'data', 'field.json')), motors: JSON.parse(rd(SHOT, 'data', 'motors.json')), shooter: JSON.parse(rd(SHOT, 'data', 'shooter.json')) };
+const shotJs = `window.SHOT_DATA = ${JSON.stringify(shotData)};\n${rd(SHOT, 'engine.js')}`;
+
 const fragment = [
   '<title>FTC Sim Bench</title>',
-  '<meta name="description" content="Drop in any FTC robot\'s STEP CAD and any OpMode. The bench reads the assembly, interprets the code at 50 Hz, and lets you drive the result with a virtual gamepad.">',
+  '<meta name="description" content="Drop in any FTC robot\'s STEP CAD and any OpMode. The bench reads the assembly, interprets the code at 50 Hz, and lets you drive and shoot on the BIOBUZZ field with a virtual gamepad.">',
   '<link rel="preconnect" href="https://fonts.googleapis.com">',
   '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">',
@@ -33,6 +39,7 @@ const fragment = [
   '<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>',
   `<style>\n${css}</style>`,
   markup,
+  `<script>\n${safe(shotJs)}</script>`,
   `<script>\n${safe(js)}</script>`,
 ].join('\n');
 

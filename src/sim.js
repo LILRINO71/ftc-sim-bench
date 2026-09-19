@@ -13,6 +13,9 @@ const Sim={
     const sp=(opts&&opts.startPose)||{x:0,y:0,h:0};
     this.chassis={x:sp.x,y:sp.y,h:sp.h};
     this.code=code; this.cad=cad; this.map=map; this.opts=opts;
+    this.footprint=footprintOf(cad,opts&&opts.front);
+    this.obstacles=Field.ok?Field.obstacles(this.footprint.h):[];
+    this.bump=null;
     this.pc=0; this.sleepEnd=null; this.sleptMs=0; this.autoDone=false;
     for(const d of code.devices){
       const mech=cad.mechs.filter(m=>m.id===map[d.name])[0]||null;
@@ -128,7 +131,8 @@ const Sim={
            here would double-count it — a robot told to drive forward would
            spin. It's tracked for reporting instead. */
         if(st.op==="setPosition") s.cmd=clamp01(v);
-        else s.cmd=Math.max(-1,Math.min(1,st.op==="setVelocity"?v/1000:v));
+        else if(st.op==="setVelocity") s.cmd=Math.max(-1,Math.min(1,v/((s.spec.rpm||300)/60*s.tpr)));   // ticks/s → share of free speed
+        else s.cmd=Math.max(-1,Math.min(1,v));
       }else if(st.kind==="pidnew"){
         const a=st.args.map(x=>evalNode(x,env));
         this.pidOp(st.obj,"setPID",a);
@@ -221,6 +225,7 @@ const Sim={
       s.act=want;
     }
     this.driveChassis(dt);
+    Shots.tick(dt,this.chassis);
   },
   driveChassis(dt){
     const dtn=this.drivetrain;
@@ -242,7 +247,8 @@ const Sim={
     this.chassis.h += w*dt;
     this.chassis.x += (v*Math.cos(this.chassis.h) - strafe*SPEED*Math.sin(this.chassis.h))*dt;
     this.chassis.y += (v*Math.sin(this.chassis.h) + strafe*SPEED*Math.cos(this.chassis.h))*dt;
-    const LIM=1.78;                            // half an FTC field
+    if(Field.ok){ this.bump=Field.collide(this.chassis,this.footprint,this.obstacles); return; }
+    const LIM=1.78;                            // half a nominal 12 ft field
     this.chassis.x=Math.max(-LIM,Math.min(LIM,this.chassis.x));
     this.chassis.y=Math.max(-LIM,Math.min(LIM,this.chassis.y));
   }
