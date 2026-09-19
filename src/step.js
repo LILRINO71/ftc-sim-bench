@@ -330,6 +330,30 @@ function parseSTEP(text, onProgress){
   }
   if(!P.length){ mn[0]=mn[1]=mn[2]=-0.25; mx[0]=mx[1]=mx[2]=0.25; }
 
+  /* ---- solids: each leaf part's own points, placed, so the view can draw
+     the robot as parts instead of a cloud. Assemblies only hold placements. */
+  const solids=[];
+  for(const o of occs){
+    if(o.rep==null||kidsOcc.has(o.pd)) continue;
+    const lp=localPoints(o.rep); if(lp.length<4) continue;
+    const w=[]; const smn=[1e18,1e18,1e18], smx=[-1e18,-1e18,-1e18];
+    for(const v0 of lp){
+      const v=bakedGlobal?v0:applyM(o.M,v0);
+      const p=[v[0]*scale,v[1]*scale,v[2]*scale];
+      if(p[0]<L0[0]||p[0]>L0[1]||p[1]<L1[0]||p[1]>L1[1]||p[2]<L2[0]||p[2]>L2[1]) continue;
+      w.push(p);
+      for(let k=0;k<3;k++){ if(p[k]<smn[k])smn[k]=p[k]; if(p[k]>smx[k])smx[k]=p[k]; }
+    }
+    if(w.length<4) continue;
+    const size=Math.hypot(smx[0]-smn[0],smx[1]-smn[1],smx[2]-smn[2]);
+    if(size<0.006) continue;                   // washers and grub screws
+    const raw=pname(o.pd)||"", pm=/(\d{4}-\d{4}-\d{1,4}|REV-\d{2}-\d{4})/.exec(raw);
+    solids.push({name:clean(raw), part:pm?pm[1]:null, kind:solidKind(raw,pm?pm[1]:null), size, pts:thinPoints(w,120)});
+  }
+  solids.sort((a,b)=>b.size-a.size);
+  if(solids.length>1800) solids.length=1800;
+  onProgress && onProgress(solids.length+" parts");
+
   // ---- parts inventory
   const counts=new Map(), partNo=new Map();
   for(const [id,pr] of nauo){
@@ -439,7 +463,7 @@ function parseSTEP(text, onProgress){
   }
   classifyMechs(mechs);
 
-  return {name:null, units:scale===1?"METRE":"MILLIMETRE", points:P, pointCount:P.length,
+  return {name:null, units:scale===1?"METRE":"MILLIMETRE", points:P, pointCount:P.length, solids,
           bbox:{min:mn,max:mx}, parts, mechs, placements};
 }
 

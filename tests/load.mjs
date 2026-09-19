@@ -5,9 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ENGINE = ['hardware', 'samples', 'step', 'expr', 'java', 'mapping', 'robotconfig', 'compare', 'analyze', 'field', 'shots', 'sim'];
+const ENGINE = ['hardware', 'samples', 'step', 'hull', 'expr', 'java', 'mapping', 'robotconfig', 'compare', 'analyze', 'field', 'shots', 'controllers', 'sim'];
 const EXPORTS = [
   'Field', 'Shots', 'IN', 'TIP_GRAMS', 'FRONTS', 'footprintOf', 'capsulePush', 'nearestMotorId', 'SHOOTER_JAVA',
+  'convexHull', 'boxCorners', 'solidTriangles', 'thinPoints', 'solidKind', 'sampleSolids', 'robotBase', 'makeRng',
+  'padFromGamepad', 'padName', 'padFor', 'busiestPad', 'PAD_BUTTONS',
   'HW_PARTS', 'GENERIC', 'hwFromPart', 'specFor',
   'SAMPLE_JAVA', 'DRIVE_JAVA', 'SAMPLE_CAD', 'synthGeometry',
   'splitStepRecords', 'parseSTEP', 'classifyMechs', 'recomputeChain', 'rigCarries', 'rigRoots', 'mlabel',

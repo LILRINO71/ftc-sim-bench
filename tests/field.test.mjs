@@ -118,8 +118,56 @@ test('hood window: speeds inside it score, speeds outside miss', () => {
   assert.equal(shot(w.hi + 0.4), false);
 });
 
+/* Aim the way a driver would: face where the Shot Sim says, with its angle and speed. */
+function aimAt(E, xIn, yIn) {
+  const pose = { x: xIn * E.IN, y: yIn * E.IN, h: 0 };
+  let r = E.Field.E.evaluate(E.Shots.params(pose), 'full');
+  for (let k = 0; k < 3 && r.best; k++) { pose.h = r.best.yawDeg * Math.PI / 180; r = E.Field.E.evaluate(E.Shots.params(pose), 'full'); }
+  const full = E.Shots.full();
+  E.Shots.cfg.hoodDeg = r.best.thetaDeg;
+  E.Sim.dev.flywheel.act = r.best.v / full.v * full.rpm / full.free;
+  return { pose, r };
+}
+
+test('shots: real shots scatter, so what goes in matches the Shot Sim\'s verdict', () => {
+  const { E } = shooterBench();
+  for (const [x, y] of [[-40, -30], [-62.35, -12], [-35, -10]]) {
+    const { pose, r } = aimAt(E, x, y);
+    const odds = E.Shots.odds(pose, null, 400);
+    assert.ok(Math.abs(odds - r.hitRate) < 0.12, `(${x}, ${y}): ${Math.round(odds * 100)} % here vs ${Math.round(r.hitRate * 100)} % in the Shot Sim`);
+  }
+});
+
+test('shots: a WON\'T WORK spot mostly misses, even aimed perfectly', () => {
+  const { E } = shooterBench();
+  const { pose, r } = aimAt(E, -50, 40);
+  assert.equal(r.verdict, "WON'T WORK");
+  let hits = 0;
+  for (let i = 0; i < 40; i++) { const b = E.Shots.fire(pose, 'test'); if (b && b.hit) hits++; }
+  assert.equal(E.Shots.fired, 40);
+  assert.ok(hits <= 12, `${hits} of 40 went in`);
+});
+
+test('shots: the robot\'s own motion rides with the ball', () => {
+  const { E } = shooterBench();
+  const L = E.Shots.withVelocity(5, 45, 0, { x: 1, y: 0 });
+  assert.ok(Math.abs(L.v - 5.7507) < 1e-3 && Math.abs(L.th - 37.937) < 1e-3 && Math.abs(L.yaw) < 1e-9);
+  const S = E.Shots.withVelocity(5, 45, 0, { x: 0, y: 1 });
+  assert.ok(S.yaw > 10, 'strafing bends the aim');
+  // at the top of the scoring band, driving at the HIVE sends it long
+  E.Shots.spreadScale = 0;
+  const { pose } = aimAt(E, -40, -30);
+  const w = E.Shots.window(pose, pose.h * 180 / Math.PI);
+  const full = E.Shots.full();
+  E.Sim.dev.flywheel.act = (w.hi - 0.05) / full.v * full.rpm / full.free;
+  const still = E.Shots.odds(pose, null, 8), moving = E.Shots.odds(pose, { x: Math.cos(pose.h) * 0.8, y: Math.sin(pose.h) * 0.8 }, 8);
+  assert.equal(still, 1);
+  assert.equal(moving, 0);
+});
+
 test('shots: the kicker fires what the code spins up — three POLLEN on the staged NECTAR TIP the HIVE', () => {
   const { E } = shooterBench();
+  E.Shots.spreadScale = 0;                  // this one checks the mechanics, not the luck
   const pose = { x: -40 * E.IN, y: -30 * E.IN, h: 0 };
   const r = E.Field.E.evaluate(E.Shots.params(pose), 'coarse');
   E.Sim.chassis = { x: pose.x, y: pose.y, h: r.best.yawDeg * Math.PI / 180 };

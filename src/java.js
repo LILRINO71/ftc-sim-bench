@@ -86,6 +86,8 @@ function parseStatements(src, base, opts){
    else on a non-device object is reported as not simulated. */
 const SIM_METHODS = /^(setDirection|setMode|setTargetPosition|setPID|setPIDF|setP|setI|setD|reset|resetYaw)$/;
 const NOOP_METHODS = /^(initialize|clear|clearAll|addData|addLine|setMsTransmissionInterval|setAutoClear|setZeroPowerBehavior|setCaption|speak|log|getInstance|getTelemetry|close|setPwmEnable|setPwmDisable)$/;
+/* On a gamepad: rumble reaches a plugged-in controller; the light bar has nowhere to go. */
+const GAMEPAD_METHODS = /^(rumble|rumbleBlips|stopRumble|isRumbling|setLedColor|runLedEffect|runRumbleEffect)$/;
 function findStatementEnd(rest){
   const lp=rest.indexOf("(");
   let d=0,j=lp;
@@ -179,7 +181,8 @@ function coverage(code){
     if(st.kind==="unknown"){ skipped.push({line:lineAt(code,st.at), text:st.text, why:st.why, phase}); continue; }
     if(st.kind==="objcall"){
       const known = devices[st.obj] ? SIM_METHODS.test(st.meth)||NOOP_METHODS.test(st.meth)
-                  : pids[st.obj]||SIM_METHODS.test(st.meth)||NOOP_METHODS.test(st.meth);
+                  : pids[st.obj]||SIM_METHODS.test(st.meth)||NOOP_METHODS.test(st.meth)||
+                    (/^gamepad[12]$/.test(st.obj)&&GAMEPAD_METHODS.test(st.meth));
       if(!known){ skipped.push({line:lineAt(code,st.at), text:st.obj+"."+st.meth+"(…)",
         why: devices[st.obj] ? "this device method isn't simulated"
                              : "calls into other classes aren't simulated", phase}); continue; }

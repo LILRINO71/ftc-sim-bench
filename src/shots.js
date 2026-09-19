@@ -4,19 +4,34 @@
    The flywheel speed comes from what the code commands (setPower or
    setVelocity), the launch angle from the hood, the aim from where the
    robot is pointing. The BIOBUZZ Shot Sim flies the ball — drag, spin,
-   the CELL lip, the frame — and says whether it goes in. Three POLLEN
-   on top of the staged NECTAR TIP the HIVE, as on the real field.
+   the CELL lip, the frame — and says whether it goes in.
+
+   Every shot wanders the way a real one does: launch angle, aim and exit
+   speed each scatter by the Shot Sim's precision figures, and the robot's
+   own motion is added to the ball. A spot the Shot Sim calls 40 % scores
+   about 40 % of the time here too — no perfect shots.
    ============================================================ */
 const SHOT_STEP_S=0.005;          // the Shot Sim stores a path sample every 5 ms
 const SHOOTER_NAME=/shoot|fly_?wheel|launch|cannon|outtake/i;
 const FEEDER_NAME=/feed|kick|flick|push|index|transfer|gate|trigger|stopper|loader|hammer/i;
 const NOT_SHOOTER=/slide|lift|claw|wrist|elbow|drive/i;
 
+/* A small seeded random source, so a test or a replay sees the same shots. */
+function makeRng(seed){
+  let s=seed>>>0;
+  return ()=>{ s=(s+0x6D2B79F5)>>>0; let t=s;
+    t=Math.imul(t^(t>>>15),t|1); t^=t+Math.imul(t^(t>>>7),t|61);
+    return ((t^(t>>>14))>>>0)/4294967296; };
+}
+function gauss(rnd){ let u=0; while(u===0) u=rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*rnd()); }
+
 const Shots={
-  cfg:null, alliance:"red",
+  cfg:null, alliance:"red", seed:7, spreadScale:1,
   flying:[], landed:[], log:[], fired:0, scored:0, t:0, lastFeed:-1e9, feedWas:false,
-  defaults(){ return {shooter:null, feeder:null, motorId:null, hoodDeg:75, h0In:16, wheelMm:96, gear:1, mountDeg:0, ball:"pollen", type:"single"}; },
-  reset(){ this.flying=[]; this.landed=[]; this.log=[]; this.fired=0; this.scored=0; this.t=0; this.lastFeed=-1e9; this.feedWas=false; },
+  defaults(){ return {shooter:null, feeder:null, motorId:null, hoodDeg:75, h0In:16, wheelMm:96, gear:1, mountDeg:0,
+                      ball:"pollen", type:"single", precision:"typical"}; },
+  reset(){ this.flying=[]; this.landed=[]; this.log=[]; this.fired=0; this.scored=0; this.t=0;
+           this.lastFeed=-1e9; this.feedWas=false; this.rnd=makeRng(this.seed); },
   target(){ return this.alliance==="blue"?"blue":"red"; },
 
   /* Which devices look like a shooter and a feeder, by name and type. */
@@ -34,6 +49,7 @@ const Shots={
     if(!this.cfg.shooter||names.indexOf(this.cfg.shooter)<0) this.cfg.shooter=d.shooter[0]||null;
     if(!this.cfg.feeder||names.indexOf(this.cfg.feeder)<0) this.cfg.feeder=d.feeder[0]||null;
     if(!this.cfg.motorId) this.cfg.motorId=nearestMotorId(this.deviceRpm());
+    if(!this.cfg.precision) this.cfg.precision="typical";
   },
   /* Output-shaft free speed of the shooter motor. An unnamed motor is
      assumed to be the 6000 rpm 1:1 most flywheels use. */
@@ -45,15 +61,39 @@ const Shots={
     const c=this.cfg;
     return {type:c.type, wheelDiameterMm:c.wheelMm, gear:c.gear, motorsPerWheel:1};
   },
+  precision(){
+    const P=(Field.data&&Field.data.shooter&&Field.data.shooter.precision)||{};
+    return P[(this.cfg&&this.cfg.precision)||"typical"]||P.typical||{sigThetaDeg:1, sigYawDeg:1, sigShooter:0.015};
+  },
+
+  /* The shooter the bench draws when the CAD doesn't have one: at the back
+     of the robot, so it clears whatever mechanism the CAD carries. */
+  module(){
+    const c=this.cfg; if(!c||!c.shooter) return null;
+    const mode=(Sim.opts&&Sim.opts.shooterModel)||"auto";
+    if(mode==="hide") return null;
+    if(mode!=="show"){
+      if(this._ownCad!==Sim.cad){ this._ownCad=Sim.cad;
+        this._own=((Sim.cad&&Sim.cad.parts)||[]).some(p=>/fly ?wheel|shooter|launcher/i.test(p.name||"")); }
+      if(this._own) return null;
+    }
+    const fp=Sim.footprint||{hx:0.2};
+    return {ox:-Math.max(0,fp.hx-0.08), mount:c.mountDeg||0};
+  },
+  /* Where the ball leaves, on the field. */
+  exitPoint(pose){
+    const m=this.module(); if(!m) return {x:pose.x, y:pose.y};
+    return {x:pose.x+Math.cos(pose.h)*m.ox, y:pose.y+Math.sin(pose.h)*m.ox};
+  },
   /* Engine parameters for a robot at this pose (metres, radians). The Shot
      Sim keeps an 18 in robot's centre 9 in off the walls; the bench's own
      collisions already keep this robot on the field, so meet it there. */
   params(pose){
-    const c=this.cfg, L=Field.data.field.field.half-9;
-    const x=Math.max(-L,Math.min(L,pose.x/IN)), y=Math.max(-L,Math.min(L,pose.y/IN));
+    const c=this.cfg, L=Field.data.field.field.half-9, e=this.exitPoint(pose);
+    const x=Math.max(-L,Math.min(L,e.x/IN)), y=Math.max(-L,Math.min(L,e.y/IN));
     return {robot:{x, y}, target:this.target(), ballId:c.ball,
       hiveState:{red:Field.hive.red, blue:Field.hive.blue}, h0:c.h0In,
-      motorId:c.motorId, shooter:this.shooterSpec()};
+      motorId:c.motorId, shooter:this.shooterSpec(), precision:this.precision()};
   },
   /* Exit speed with the flywheel at full free speed, and the motor behind it. */
   full(){
@@ -77,28 +117,52 @@ const Shots={
   exitSpeed(){ const f=this.full(); return f.rpm?f.v*Math.min(1,this.spin()*f.free/f.rpm):0; },
   yawDeg(pose){ return pose.h*180/Math.PI+(this.cfg.mountDeg||0); },
 
+  /* How far a real shot wanders at this exit speed: the precision preset
+     plus the motor's own speed error — what the Shot Sim's verdict assumes. */
+  spread(v){
+    const pr=this.precision(), k=this.spreadScale;
+    let sm=0, sr=0;
+    try{ const m=Field.E.motorModel(this.cfg.motorId,this.shooterSpec(),this.cfg.ball,v); sm=m.sigmaMotor||0; sr=m.sigmaRecovery||0; }catch(e){}
+    return {th:pr.sigThetaDeg*k, yaw:pr.sigYawDeg*k, v:Math.sqrt(pr.sigShooter*pr.sigShooter+sm*sm+sr*sr)*k};
+  },
+  /* The robot's own velocity rides along with the ball. */
+  withVelocity(v,thDeg,yawDeg,vel){
+    if(!vel||(!vel.x&&!vel.y)) return {v, th:thDeg, yaw:yawDeg};
+    const th=thDeg*Math.PI/180, ps=yawDeg*Math.PI/180, h=v*Math.cos(th);
+    const hx=h*Math.cos(ps)+vel.x, hy=h*Math.sin(ps)+vel.y, vz=v*Math.sin(th), hh=Math.hypot(hx,hy);
+    return {v:Math.hypot(hh,vz), th:Math.atan2(vz,hh)*180/Math.PI, yaw:Math.atan2(hy,hx)*180/Math.PI};
+  },
+  /* One real shot's launch: the nominal angle, aim and speed, scattered. */
+  sample(v0,th0,yaw0,s,rnd,vel){
+    return this.withVelocity(v0*(1+gauss(rnd)*s.v), th0+gauss(rnd)*s.th, yaw0+gauss(rnd)*s.yaw, vel);
+  },
+  /* The share of shots that go in if the robot fires now, as it stands. */
+  odds(pose,vel,n){
+    const v0=this.exitSpeed(); if(v0<1) return 0;
+    n=n||48;
+    const rnd=makeRng(20260917), s=this.spread(v0), p=this.params(pose), th=this.cfg.hoodDeg, yaw=this.yawDeg(pose);
+    let hits=0;
+    for(let i=0;i<n;i++){ const L=this.sample(v0,th,yaw,s,rnd,vel); if(Field.E.classifyShot(p,L.th,L.v,L.yaw).hit) hits++; }
+    return hits/n;
+  },
+
   /* Fire one ball with the robot exactly as it is. */
-  fire(pose,why){
+  fire(pose,why,vel){
     if(!Field.ok||!this.cfg) return null;
-    const v=this.exitSpeed();
-    if(!this.cfg.shooter) return this.note("No shooter motor picked — choose one in the Shot tab.");
-    if(v<1) return this.note("Flywheel isn't spinning — "+this.cfg.shooter+" is at "+Math.round(this.spin()*100)+"%.");
-    const r=Field.E.classifyShot(this.params(pose), this.cfg.hoodDeg, v, this.yawDeg(pose));
-    return this.launchPath(r, v, why||"fired");
+    if(!this.cfg.shooter) return this.note("No flywheel picked — choose one in the Shot tab.");
+    const v0=this.exitSpeed();
+    if(v0<1) return this.note("Flywheel isn't spinning — "+this.cfg.shooter+" is at "+Math.round(this.spin()*100)+"%.");
+    if(!this.rnd) this.rnd=makeRng(this.seed);
+    const odds=this.odds(pose,vel,32);
+    const L=this.sample(v0,this.cfg.hoodDeg,this.yawDeg(pose),this.spread(v0),this.rnd,vel);
+    const r=Field.E.classifyShot(this.params(pose),L.th,L.v,L.yaw);
+    return this.launchPath(r,L.v,why,odds);
   },
-  /* A demonstration shot: the engine's best arc from here, perfectly aimed. */
-  fireBest(pose){
-    if(!Field.ok||!this.cfg) return null;
-    const r=Field.E.evaluate(this.params(pose),"coarse");
-    if(!r.best) return this.note("No arc from here reaches the "+this.target().toUpperCase()+" up-CELL.");
-    const c=Field.E.classifyShot(this.params(pose), r.best.thetaDeg, r.best.v, r.best.yawDeg);
-    return this.launchPath(c, r.best.v, "best shot");
-  },
-  launchPath(r,v,why){
+  launchPath(r,v,why,odds){
     const ball=this.cfg.ball, path=r.path||[];
     if(path.length<2) return null;
     const b={path, t:0, dur:(path.length-1)*SHOT_STEP_S, hit:!!r.hit, cause:r.cause, kind:ball,
-             color:ball==="nectar"?this.target():null, al:this.target(), v, why, pos:path[0].slice()};
+             color:ball==="nectar"?this.target():null, al:this.target(), v, why, odds, pos:path[0].slice()};
     this.flying.push(b); this.fired++;
     return b;
   },
@@ -118,7 +182,7 @@ const Shots={
       if(on&&this.t-this.lastFeed>=0.5){ pulse=true; this.lastFeed=this.t; }
       if(!on) this.lastFeed=-1e9;
     }
-    if(pulse) this.fire(pose,"fed by "+c.feeder);
+    if(pulse) this.fire(pose,"fed by "+c.feeder,Sim.vel);
   },
   tick(dt,pose){
     this.t+=dt;
@@ -131,12 +195,13 @@ const Shots={
       if(b.t>=b.dur) b.done=true;
     }
     for(const b of this.flying.filter(b=>b.done)){
+      const od=b.odds!=null?` · a ${Math.round(b.odds*100)} % shot`:"";
       if(b.hit){
         this.scored++;
         const tipped=Field.addToCell(b.al,b.kind,b.color);
-        this.note(`IN the ${b.al.toUpperCase()} up-CELL at ${b.v.toFixed(1)} m/s`+(tipped?` — TIP ${Field.tips[b.al]}`:""));
+        this.note(`IN the ${b.al.toUpperCase()} up-CELL at ${b.v.toFixed(1)} m/s${od}`+(tipped?` — TIP ${Field.tips[b.al]}`:""));
       }else{
-        this.note(`Missed — ${CAUSE_TEXT[b.cause]||b.cause||"no score"} at ${b.v.toFixed(1)} m/s`);
+        this.note(`Missed — ${CAUSE_TEXT[b.cause]||b.cause||"no score"} at ${b.v.toFixed(1)} m/s${od}`);
         this.landed.push({pos:b.pos.slice(), vz:0, t:0, kind:b.kind, color:b.color});
       }
     }

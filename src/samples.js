@@ -339,6 +339,44 @@ const SAMPLE_CAD = {
   ]
 };
 
+/* The same robot as solids: goBILDA channel frame, the column, three
+   servos, the arm and a printed claw. */
+function sampleSolids(){
+  const box=(name,kind,c,s)=>{ const pts=[];
+    for(let i=0;i<8;i++) pts.push([c[0]+(i&1?.5:-.5)*s[0], c[1]+(i&2?.5:-.5)*s[1], c[2]+(i&4?.5:-.5)*s[2]]);
+    return {name, kind, pts, size:Math.hypot(s[0],s[1],s[2])}; };
+  const bar=(name,kind,a,b,w,t)=>{
+    const d=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], L=Math.hypot(d[0],d[1],d[2]), u=d.map(v=>v/L);
+    const up=Math.abs(u[2])<0.9?[0,0,1]:[1,0,0];
+    let s=[u[1]*up[2]-u[2]*up[1], u[2]*up[0]-u[0]*up[2], u[0]*up[1]-u[1]*up[0]];
+    const sl=Math.hypot(s[0],s[1],s[2]); s=s.map(v=>v/sl);
+    const n=[u[1]*s[2]-u[2]*s[1], u[2]*s[0]-u[0]*s[2], u[0]*s[1]-u[1]*s[0]];
+    const pts=[];
+    for(const e of [a,b]) for(const i of [-1,1]) for(const j of [-1,1])
+      pts.push([e[0]+s[0]*i*w/2+n[0]*j*t/2, e[1]+s[1]*i*w/2+n[1]*j*t/2, e[2]+s[2]*i*w/2+n[2]*j*t/2]);
+    return {name, kind, pts, size:L};
+  };
+  const cyl=(name,kind,c,r,h,axis)=>{ const pts=[];
+    for(let i=0;i<16;i++){ const t=i/16*Math.PI*2, a=Math.cos(t)*r, b=Math.sin(t)*r;
+      for(const z of [-h/2,h/2]) pts.push(axis==="x"?[c[0]+z,c[1]+a,c[2]+b]:axis==="y"?[c[0]+a,c[1]+z,c[2]+b]:[c[0]+a,c[1]+b,c[2]+z]); }
+    return {name, kind, pts, size:Math.hypot(2*r,h)}; };
+  return [
+    box("1120 U-Channel, left","metal",[0.014,0.255,-0.026],[0.032,0.240,0.048]),
+    box("1120 U-Channel, right","metal",[0.254,0.255,-0.026],[0.032,0.240,0.048]),
+    box("1120 U-Channel, back","metal",[0.134,0.372,-0.026],[0.250,0.032,0.048]),
+    box("1120 U-Channel, front","metal",[0.134,0.140,-0.026],[0.250,0.032,0.048]),
+    box("1121 Low-Side U-Channel column","metal",[0.135,0.231,0.055],[0.042,0.042,0.210]),
+    box("Base servo 2000-0025-0002","servo",[0.135,0.231,-0.040],[0.056,0.056,0.050]),
+    cyl("Sonic Hub","metal",[0.135,0.231,-0.010],0.018,0.012,"z"),
+    box("Arm servo 2000-0025-0002","servo",[0.132,0.224,0.196],[0.046,0.056,0.040]),
+    bar("Arm 1107 Channel","metal",[0.132,0.224,0.196],[0.030,0.172,0.094],0.030,0.018),
+    box("Claw servo 2000-0025-0003","servo",[0.030,0.150,0.092],[0.040,0.048,0.036]),
+    box("Claw palm (printed)","printed",[0.016,0.181,0.084],[0.030,0.030,0.030]),
+    box("Claw finger (printed)","printed",[0.004,0.196,0.104],[0.014,0.056,0.012]),
+    box("Claw finger (printed)","printed",[0.030,0.200,0.112],[0.014,0.056,0.012])
+  ];
+}
+
 function synthGeometry(){
   const P=[]; const R=(a,b)=>a+Math.random()*(b-a);
   const box=(c,s,n)=>{for(let i=0;i<n;i++){

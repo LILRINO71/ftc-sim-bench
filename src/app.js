@@ -11,7 +11,7 @@ const store={
 };
 
 let CODE=null, CAD=null, MAP={}, FINDINGS=[], activePad=2;
-const OPTS={payloadKg:0.180, duty:0.30, trust:"code", robotConfig:null, front:"+x"};
+const OPTS={payloadKg:0.180, duty:0.30, trust:"code", robotConfig:null, front:"+x", baseModel:"auto", shooterModel:"auto"};
 let IGNORED={};
 try{ IGNORED=JSON.parse(store.get("ftcbench.ignored","{}"))||{}; }catch(e){ IGNORED={}; }
 function saveIgnored(){ store.set("ftcbench.ignored",JSON.stringify(IGNORED)); }
@@ -19,6 +19,7 @@ let LIBRARY=[], CURRENT_ID=null;
 let ROBOT_CFG_NAME=null;
 let CONFIG_OVR={};                 // live-edited config variables, like FTC Dashboard
 let RIG_DEVICES={};                // device → mechanism, remembered across OpModes
+let RAILS_READY=false;             // after boot, picking a tab opens its panel
 
 /* ============================================================
    TABS
@@ -33,19 +34,61 @@ function initTabs(){
       const n=tabs[(i+(e.key==="ArrowRight"?1:tabs.length-1))%tabs.length];
       n.focus(); selectTab(nav,n.dataset.tab); e.preventDefault();
     });
-    const saved=store.get("ftcbench.tab."+nav.dataset.tabs,null);
+    const saved=TAB_RENAMED[store.get("ftcbench.tab."+nav.dataset.tabs,"")]||store.get("ftcbench.tab."+nav.dataset.tabs,null);
     if(saved&&nav.querySelector(`button[data-tab="${saved}"]`)) selectTab(nav,saved);
   });
 }
+const TAB_RENAMED={code:"teleop", hardware:"robot", rig:"robot", config:"tune"};
 function selectTab(nav,tab){
+  tab=TAB_RENAMED[tab]||tab;
   nav.querySelectorAll("button[data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===tab)));
   nav.parentElement.querySelectorAll(".pane").forEach(p=>{ p.hidden=p.dataset.pane!==tab; });
   store.set("ftcbench.tab."+nav.dataset.tabs,tab);
+  const rail=nav.closest(".rail"); if(RAILS_READY&&rail) setRail(rail.id==="railLeft"?"left":"right",true,false);
   if(tab==="graph") Graph.draw();
   if(tab==="compare") renderCompare();
   if(tab==="shot"){ ShotUI.dirty=true; ShotUI.t=0; renderShotSetup(); }
+  if(tab==="java") Editor.refresh();
 }
-const paneVisible=name=>{ const p=document.querySelector(`.pane[data-pane="${name}"]`); return p&&!p.hidden; };
+const paneVisible=name=>{ const p=document.querySelector(`.pane[data-pane="${name}"]`); return p&&!p.hidden&&!p.closest(".app").classList.contains(p.closest(".rail-left")?"left-closed":"right-closed"); };
+
+/* ============================================================
+   FOLDING — every section, both side panels, the dock
+   ============================================================ */
+function initCollapsibles(){
+  $$(".sec[data-sec]").forEach(sec=>{
+    const id=sec.dataset.sec, h=sec.querySelector(".sec-head h3"); if(!h) return;
+    const saved=store.get("ftcbench.sec."+id,null);
+    const closed=saved==null?sec.dataset.collapsed==="1":saved==="1";
+    const set=c=>{ sec.classList.toggle("closed",c); h.setAttribute("aria-expanded",String(!c)); };
+    set(closed);
+    h.tabIndex=0; h.setAttribute("role","button");
+    const flip=()=>{ const c=!sec.classList.contains("closed"); set(c); store.set("ftcbench.sec."+id,c?"1":"0");
+      if(id==="coverage") Editor.refresh(); };
+    h.addEventListener("click",flip);
+    h.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); flip(); } });
+  });
+}
+function setRail(side,open,save){
+  const cls=side+"-closed", app=$("#app"), was=!app.classList.contains(cls);
+  app.classList.toggle(cls,!open);
+  if(save!==false&&open!==was) store.set("ftcbench.rail."+side,open?"1":"0");
+  if(open!==was){ View.resize(); if(open) Graph.draw(); }
+}
+function initRails(){
+  $$("[data-rail]").forEach(b=>b.addEventListener("click",()=>{
+    const side=b.dataset.rail; setRail(side,$("#app").classList.contains(side+"-closed")); }));
+  for(const side of ["left","right"]) if(store.get("ftcbench.rail."+side,"1")==="0") setRail(side,false,false);
+  const dock=$("#dock"), tg=$("#dockToggle");
+  const setDock=open=>{ dock.classList.toggle("closed",!open); tg.setAttribute("aria-expanded",String(open));
+    tg.title=open?"Fold the dock away":"Show the dock"; View.resize(); };
+  setDock(store.get("ftcbench.dock","1")!=="0");
+  tg.addEventListener("click",()=>{ const open=dock.classList.contains("closed"); setDock(open); store.set("ftcbench.dock",open?"1":"0"); });
+  const pip=$("#pip"), ph=$("#pipHead");
+  const setPip=open=>{ pip.classList.toggle("closed",!open); ph.setAttribute("aria-expanded",String(open)); };
+  setPip(store.get("ftcbench.pip","1")!=="0");
+  ph.addEventListener("click",()=>{ const open=pip.classList.contains("closed"); setPip(open); store.set("ftcbench.pip",open?"1":"0"); });
+}
 
 /* ============================================================
    OPMODE LIBRARY
@@ -75,19 +118,23 @@ function saveLibrary(){
 const opName=e=> e.code&&e.code.opmode ? e.code.opmode : e.file.replace(/\.java$/,"");
 const opKind=e=> e.code&&e.code.kind==="Autonomous" ? "Auto" : "TeleOp";
 
+/* TeleOp and Autonomous OpModes in their own lists. */
 function renderOpList(){
-  $("#opList").innerHTML=LIBRARY.map(e=>`
+  const row=e=>`
     <div class="oprow${e.id===CURRENT_ID?" on":""}" data-op="${esc(e.id)}" tabindex="0" role="button" aria-pressed="${e.id===CURRENT_ID}">
-      <span class="kind${opKind(e)==="Auto"?" auto":""}">${opKind(e)}</span>
       <div><div class="on-name">${esc(opName(e))}</div><div class="on-file">${esc(e.file)}${e.builtin?" · sample":""}</div></div>
       ${e.builtin?"<span></span>":`<button class="rm" data-oprm="${esc(e.id)}" title="Remove ${esc(e.file)}" aria-label="Remove ${esc(e.file)}">×</button>`}
-    </div>`).join("");
-  $$("#opList [data-op]").forEach(r=>{
+    </div>`;
+  const tele=LIBRARY.filter(e=>opKind(e)==="TeleOp"), auto=LIBRARY.filter(e=>opKind(e)==="Auto");
+  $("#opListTele").innerHTML=tele.map(row).join("")||`<div class="op-empty">No TeleOp yet — drop a <code>@TeleOp</code> .java here.</div>`;
+  $("#opListAuto").innerHTML=auto.map(row).join("")||`<div class="op-empty">No autonomous yet — an <code>@Autonomous</code> .java lands here.</div>`;
+  $("#teleCount").textContent=tele.length||""; $("#autoCount").textContent=auto.length||"";
+  $$(".oplist [data-op]").forEach(r=>{
     const go=()=>{ if(r.dataset.op!==CURRENT_ID) selectOpMode(r.dataset.op); };
     r.addEventListener("click",e=>{ if(!e.target.closest("[data-oprm]")) go(); });
     r.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); go(); } });
   });
-  $$("#opList [data-oprm]").forEach(b=>b.addEventListener("click",()=>{
+  $$(".oplist [data-oprm]").forEach(b=>b.addEventListener("click",()=>{
     const id=b.dataset.oprm;
     LIBRARY=LIBRARY.filter(e=>e.id!==id); saveLibrary();
     if(id===CURRENT_ID) selectOpMode(LIBRARY[0].id); else { renderOpList(); renderOpSelect(); renderCompareSelects(); }
@@ -108,7 +155,7 @@ function selectOpMode(id){
   const e=entry(id); if(!e) return;
   if(Sim.phase==="running") Sim.stop();
   CURRENT_ID=id; store.set("ftcbench.current",id);
-  $("#srcbox").value=e.source; $("#srcName").textContent=e.file;
+  Editor.set(e.source); $("#srcName").textContent=e.file;
   CONFIG_OVR={};
   if(!e.code){
     CODE=null;
@@ -122,7 +169,8 @@ function selectOpMode(id){
   Sim.load(CODE,CAD,MAP,withPose());
   applyConfigOverrides(); Sim.init(); applyConfigOverrides();    // like a DS: selected and INIT'd, waiting for START
   Shots.adopt(CODE); ShotUI.dirty=true; renderShotSetup();
-  buildGauges(); renderPad(); Graph.reset(); renderConfigVars(); renderLegend3D();
+  setActivePad(busiestPad(CODE)); Pads.defaults();
+  buildGauges(); Graph.reset(); renderConfigVars(); renderLegend3D();
   renderOpList(); renderOpSelect(); renderCompareSelects(); updateDS();
 }
 function addOpModeFromText(file,text){
@@ -302,6 +350,11 @@ function renderBindList(){
         <span class="edge">${g[0].analog?"analog — follows the stick":(g[0].cond?"when "+esc(g[0].cond.trim().slice(0,52)):"while held")}</span></span></div>`;
     }).join("");
 }
+function setActivePad(p){
+  activePad=p===1?1:2;
+  $$("#padSeg button").forEach(x=>x.classList.toggle("on",+x.dataset.pad===activePad));
+  renderPad(); Pads.renderChip();
+}
 
 /* ============================================================
    ACTUATOR GAUGES
@@ -367,23 +420,23 @@ function renderMech(){
   const ang=(R.lift.restAngleDeg+(aS.act-aS.restPos)*aS.travelDeg)*Math.PI/180;
   const PX=96, PY=60, ARM=92, ex=PX+Math.cos(ang)*ARM, ey=PY-Math.sin(ang)*ARM;
   const open=cS?(1-clamp01(cS.act))*11+4:8, stall=aS.stalled, deg=Math.round(ang*180/Math.PI);
-  const col=stall?"#E4574E":"#4D9FFF";
+  const col=stall?"#EC5B51":"#F2B230";
   return {deg, svg:`<svg viewBox="0 0 250 150" role="img" aria-label="Side elevation: lift arm at ${deg} degrees from horizontal">
-    <line x1="0" y1="136" x2="250" y2="136" stroke="#26313F"/>
-    <line x1="${PX}" y1="${PY}" x2="244" y2="${PY}" stroke="#2E3A49" stroke-dasharray="3 3"/>
-    <text x="244" y="${PY-4}" text-anchor="end" style="font-family:var(--mono);font-size:8px;fill:#4E5C6D">horizontal</text>
-    <rect x="${PX-34}" y="112" width="68" height="24" rx="3" fill="#1C242F" stroke="#2F3B4A"/>
-    <text x="${PX}" y="127" text-anchor="middle" style="font-family:var(--mono);font-size:7.5px;fill:#6F7F92">FRAME</text>
-    <rect x="${PX-7}" y="${PY}" width="14" height="${112-PY}" fill="#222E3B" stroke="#33414F"/>
+    <line x1="0" y1="136" x2="250" y2="136" stroke="#3A3328"/>
+    <line x1="${PX}" y1="${PY}" x2="244" y2="${PY}" stroke="#4A4133" stroke-dasharray="3 3"/>
+    <text x="244" y="${PY-4}" text-anchor="end" style="font-family:var(--mono);font-size:8px;fill:#7E7462">horizontal</text>
+    <rect x="${PX-34}" y="112" width="68" height="24" rx="3" fill="#221E17" stroke="#3E362A"/>
+    <text x="${PX}" y="127" text-anchor="middle" style="font-family:var(--mono);font-size:7.5px;fill:#9A907C">FRAME</text>
+    <rect x="${PX-7}" y="${PY}" width="14" height="${112-PY}" fill="#2A251D" stroke="#443B2E"/>
     <line x1="${PX}" y1="${PY}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${col}" stroke-width="8" stroke-linecap="round"/>
-    <circle cx="${PX}" cy="${PY}" r="8" fill="#0E1218" stroke="${col}" stroke-width="3"/>
+    <circle cx="${PX}" cy="${PY}" r="8" fill="#12100C" stroke="${col}" stroke-width="3"/>
     <g transform="translate(${ex.toFixed(1)},${ey.toFixed(1)}) rotate(${(-ang*180/Math.PI).toFixed(1)})">
-      <line x1="0" y1="0" x2="13" y2="${(-open).toFixed(1)}" stroke="#3FB68B" stroke-width="4" stroke-linecap="round"/>
-      <line x1="0" y1="0" x2="13" y2="${open.toFixed(1)}" stroke="#3FB68B" stroke-width="4" stroke-linecap="round"/>
-      <circle r="5" fill="#0E1218" stroke="#3FB68B" stroke-width="2.2"/>
+      <line x1="0" y1="0" x2="13" y2="${(-open).toFixed(1)}" stroke="#E6D2A4" stroke-width="4" stroke-linecap="round"/>
+      <line x1="0" y1="0" x2="13" y2="${open.toFixed(1)}" stroke="#E6D2A4" stroke-width="4" stroke-linecap="round"/>
+      <circle r="5" fill="#12100C" stroke="#E6D2A4" stroke-width="2.2"/>
     </g>
-    <text x="8" y="16" style="font-family:var(--mono);font-size:9px;fill:#8B9BAF">${L.toFixed(0)} mm lever</text>
-    ${stall?`<text x="8" y="30" style="font-family:var(--mono);font-size:9px;font-weight:700;fill:#E4574E">STALLED — can't lift</text>`:""}
+    <text x="8" y="16" style="font-family:var(--mono);font-size:9px;fill:#B6AB94">${L.toFixed(0)} mm lever</text>
+    ${stall?`<text x="8" y="30" style="font-family:var(--mono);font-size:9px;font-weight:700;fill:#EC5B51">STALLED — can't lift</text>`:""}
   </svg>`};
 }
 
@@ -482,7 +535,7 @@ function exportRig(){
     format:"ftc-sim-bench.rig", version:1,
     cad:(CAD&&CAD.name)||null, opmode:(CODE&&CODE.opmode)||null,
     trust:OPTS.trust, payloadKg:OPTS.payloadKg, duty:OPTS.duty, turretScale:View.turretScale,
-    front:OPTS.front, shot:Shots.cfg||null,
+    front:OPTS.front, baseModel:OPTS.baseModel, shooterModel:OPTS.shooterModel, shot:Shots.cfg||null,
     joints:(CAD?CAD.mechs:[]).map(m=>({
       id:m.id, label:m.label||m.id, kind:m.kind, parent:m.parent, dir:m.dir||1,
       pivotMm:m.pivot?m.pivot.map(v=>+(v*1000).toFixed(1)):null,
@@ -499,6 +552,8 @@ function applyRig(r){
   if(typeof r.duty==="number") OPTS.duty=r.duty;
   if(typeof r.turretScale==="number") View.turretScale=r.turretScale;
   if(r.front&&FRONTS[r.front]!==undefined) OPTS.front=r.front;
+  if(/^(auto|show|hide)$/.test(r.baseModel||"")) OPTS.baseModel=r.baseModel;
+  if(/^(auto|show|hide)$/.test(r.shooterModel||"")) OPTS.shooterModel=r.shooterModel;
   if(r.shot&&typeof r.shot==="object") Shots.cfg=Object.assign(Shots.defaults(),r.shot);
   const byId={}; CAD.mechs.forEach(m=>byId[m.id]=m);
   for(const j of (r.joints||[])){
@@ -625,8 +680,9 @@ function renderFindings(){
       <div class="fhead"><span class="fsev">${SEVL[f.sev]}</span><span class="ftitle">${f.title}</span>
         <button class="fignore" data-ig="${esc(f.key)}" title="Hide this finding — it stays hidden next time too">Ignore</button></div>
       <div class="fbody">${f.body}</div>
-      ${f.math?`<div class="fmath">${esc(f.math)}</div>`:""}
-      ${f.fix?`<div class="ffix"><b>Fix</b>${f.fix}</div>`:""}</div>`).join("")
+      ${(f.math||f.fix)?`<details class="fdetails"${f.sev==="fail"?" open":""}><summary>${f.math?"The numbers":"How to fix it"}</summary>
+        ${f.math?`<div class="fmath">${esc(f.math)}</div>`:""}
+        ${f.fix?`<div class="ffix"><b>Fix</b>${f.fix}</div>`:""}</details>`:""}</div>`).join("")
     :`<p class="cmp-note">Nothing to report${hidden.length?" — "+hidden.length+" finding"+(hidden.length>1?"s":"")+" ignored":""}.</p>`;
   $("#ignoredWrap").innerHTML=hidden.length
     ?`<div class="ignored-head"><h4>Ignored · ${hidden.length}</h4><span class="spacer"></span><button class="btn-sm" id="clearIgnored">Restore all</button></div>`+
@@ -644,6 +700,7 @@ function renderCoverage(){
   const cov=coverage(CODE), pill=$("#covPill");
   pill.textContent=cov.understood+" / "+cov.total+" statements";
   pill.className="pill"+(cov.skipped.length?" warnp":" live");
+  Editor.marks(cov.skipped.map(s=>s.line));
   const mode=CODE.hasLoop?"TeleOp loop":(CODE.auto&&CODE.auto.length?"autonomous sequence of "+CODE.auto.length+" steps":"no loop found");
   if(!cov.skipped.length){
     $("#coverage").innerHTML=`<p class="cov-ok"><b>Everything</b> in this OpMode runs on the bench — ${esc(mode)}.</p>`;
@@ -970,12 +1027,17 @@ function shotTick(now){
   let fresh=false;
   if(ShotUI.dirty&&now-ShotUI.t>=250){ shotEvaluate("coarse"); ShotUI.t=now; ShotUI.dirty=false; fresh=true; }
   else if(!ShotUI.dirty&&!ShotUI.full&&now-ShotUI.still>=700){ shotEvaluate("full"); ShotUI.full=true; fresh=true; }
-  // what would happen if the robot fired right now
+  // what would happen if the robot fired right now: the shot on aim, and the
+  // share of real, scattered shots that go in — with the robot's motion in both
   ShotUI.preview=null;
   if(Shots.cfg.shooter&&Shots.spin()>0.1){
     const v=Shots.exitSpeed();
-    if(v>=1) ShotUI.preview=Field.E.classifyShot(Shots.params(c),Shots.cfg.hoodDeg,v,Shots.yawDeg(c));
-  }
+    if(v>=1){
+      const L=Shots.withVelocity(v,Shots.cfg.hoodDeg,Shots.yawDeg(c),Sim.vel);
+      ShotUI.preview=Field.E.classifyShot(Shots.params(c),L.th,L.v,L.yaw);
+      if(now-(ShotUI.oddsT||0)>=250){ ShotUI.oddsT=now; ShotUI.odds=Shots.odds(c,Sim.vel,40); }
+    }
+  }else ShotUI.odds=null;
   updateArc();
   const sc=$("#shotCount"), r=ShotUI.res;
   if(sc){ const k=r?VERDICT_CLASS[r.verdict]:""; sc.textContent=r?(k==="pass"?"✓":k==="warn"?"~":"✕"):""; sc.className="count"+(k==="fail"?" fail":k==="warn"?" warn":""); }
@@ -984,7 +1046,8 @@ function shotTick(now){
 function updateArc(){
   let path=null, col=0, dashed=false;
   if(ShotUI.arc){
-    if(ShotUI.preview){ path=ShotUI.preview.path; col=ShotUI.preview.hit?0x3FB68B:0xE4574E; }
+    if(ShotUI.preview){ const o=ShotUI.odds==null?(ShotUI.preview.hit?1:0):ShotUI.odds;
+      path=ShotUI.preview.path; col=o>=0.8?0x5DBE72:o>=0.4?0xEE7F42:0xEC5B51; }
     // the best arc only when it's worth showing: a WON'T WORK "best" can be a 6 m lob
     else if(ShotUI.res&&ShotUI.res.trajectory&&ShotUI.res.verdict!=="WON'T WORK"){
       path=ShotUI.res.trajectory; col=VERDICT_HEX[ShotUI.res.verdict]||0x8595A8; dashed=true; }
@@ -1008,7 +1071,14 @@ function renderShotVerdict(){
 function renderShotLive(){
   const el=$("#shotLive"); if(!el||!Shots.cfg) return;
   const cfg=Shots.cfg, full=Shots.full(), spin=Shots.spin(), c=Sim.chassis, out=[];
-  if(!cfg.shooter) out.push(`<div>No flywheel motor picked. Choose one below, or press Fire to see the best shot from here.</div>`);
+  // the headline: what happens if the robot fires right now
+  if(cfg.shooter&&ShotUI.odds!=null){
+    const o=ShotUI.odds, cls=o>=0.8?"ok":o>=0.4?"mid":"bad", p=ShotUI.preview;
+    const aimNote=p?(p.hit?"a shot right on aim goes in":"a shot right on aim "+(CAUSE_TEXT[p.cause]||"misses")):"";
+    const moving=Math.hypot(Sim.vel.x,Sim.vel.y)>0.05?" — while driving":"";
+    out.push(`<div class="odds ${cls}"><span class="big">${Math.round(o*100)}%</span><span>of shots go in if you fire now${moving}.<br><span class="dim">${esc(aimNote)}</span></span></div>`);
+  }
+  if(!cfg.shooter) out.push(`<div>This OpMode has no flywheel motor. The verdict above is what a tuned shooter could do from here — pick a motor below if it has another name.</div>`);
   else out.push(`<div><code>${esc(cfg.shooter)}</code> ${spin>0.01
     ?`at <b>${Math.round(spin*100)}%</b> of free speed → ${Math.round(Math.min(full.rpm,spin*full.free)).toLocaleString()} rpm → <b>${Shots.exitSpeed().toFixed(2)} m/s</b>`
     :"is stopped"+(Sim.phase==="running"?"":" — press START")}</div>`);
@@ -1024,7 +1094,6 @@ function renderShotLive(){
     const d=wrap180(ShotUI.res.best.yawDeg-Shots.yawDeg(c));
     out.push(Math.abs(d)<1.5?`<div>Aimed at the up-CELL.</div>`:`<div>Aim: turn <b>${Math.abs(d).toFixed(0)}° ${d>0?"left":"right"}</b>.</div>`);
   }
-  if(ShotUI.preview) out.push(`<div>Fire now and it ${ShotUI.preview.hit?`<b class="ok">goes in</b>`:`<b class="bad">${esc(CAUSE_TEXT[ShotUI.preview.cause]||"misses")}</b>`}.</div>`);
   setHTML(el,out.join(""));
 }
 function renderHives(){
@@ -1051,7 +1120,9 @@ function renderShotSetup(){
   if(!$("#shotDev")) return;
   $$("#allySeg button").forEach(b=>b.classList.toggle("on",b.dataset.al===Shots.alliance));
   const cfg=Shots.cfg;
-  const fire=$("#fireBtn"); if(fire) fire.disabled=!Field.ok||!cfg;
+  const fire=$("#fireBtn");
+  if(fire){ fire.disabled=!Field.ok||!cfg||!cfg.shooter;
+    fire.title=cfg&&cfg.shooter?"Launch one ball with the robot as it is (F)":"This OpMode has no flywheel to fire"; }
   if(!cfg||!Field.ok){ renderShotVerdict(); return; }
   const devs=(CODE&&CODE.devices)||[];
   const opt=(list,sel,none)=>[`<option value="">${none}</option>`].concat(list.map(d=>
@@ -1061,6 +1132,7 @@ function renderShotSetup(){
   $$("#ballSeg button").forEach(b=>b.classList.toggle("on",b.dataset.ball===cfg.ball));
   $$("#typeSeg button").forEach(b=>b.classList.toggle("on",b.dataset.type===cfg.type));
   $$("#mountSeg button").forEach(b=>b.classList.toggle("on",+b.dataset.mount===(cfg.mountDeg||0)));
+  $$("#precSeg button").forEach(b=>b.classList.toggle("on",b.dataset.prec===(cfg.precision||"typical")));
   $("#hoodSlider").value=cfg.hoodDeg; $("#hoodVal").textContent=cfg.hoodDeg+"°";
   $("#h0Slider").value=cfg.h0In; $("#h0Val").textContent=cfg.h0In+" in";
   const motors=Field.data.motors.motors;
@@ -1071,10 +1143,11 @@ function renderShotSetup(){
   renderShotVerdict(); renderShotLive(); renderHives(); renderShotLog();
 }
 function shotChanged(){ ShotUI.dirty=true; ShotUI.t=0; saveRig(); renderShotSetup(); }
+/* Fire the robot's own shooter as it stands — no perfect test shots. */
 function shotFire(){
   if(!Field.ok||!Shots.cfg) return;
-  if(Shots.cfg.shooter&&Shots.spin()>0.1) Shots.fire(Sim.chassis,"fired by hand");
-  else Shots.fireBest(Sim.chassis);
+  if(!Shots.cfg.shooter) Shots.note("This OpMode has no flywheel — load one that shoots, or pick its motor in the Shot tab.");
+  else Shots.fire(Sim.chassis,"fired by hand",Sim.vel);
   renderShotLog();
 }
 function wireShotTab(){
@@ -1087,6 +1160,7 @@ function wireShotTab(){
   seg("#ballSeg",b=>Shots.cfg.ball=b.dataset.ball);
   seg("#typeSeg",b=>Shots.cfg.type=b.dataset.type);
   seg("#mountSeg",b=>Shots.cfg.mountDeg=+b.dataset.mount);
+  seg("#precSeg",b=>Shots.cfg.precision=b.dataset.prec);
   $("#hoodSlider").addEventListener("input",e=>{ if(!Shots.cfg) return; Shots.cfg.hoodDeg=+e.target.value; $("#hoodVal").textContent=e.target.value+"°"; ShotUI.dirty=true; saveRig(); });
   $("#h0Slider").addEventListener("input",e=>{ if(!Shots.cfg) return; Shots.cfg.h0In=+e.target.value; $("#h0Val").textContent=e.target.value+" in"; ShotUI.dirty=true; saveRig(); });
   $("#motorSel").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.motorId=e.target.value; shotChanged(); });
@@ -1094,24 +1168,28 @@ function wireShotTab(){
   $("#gearIn").addEventListener("change",e=>{ if(!Shots.cfg) return; const v=parseFloat(e.target.value); if(isFinite(v)&&v>0) Shots.cfg.gear=Math.max(0.25,Math.min(4,v)); shotChanged(); });
   $("#shotDev").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.shooter=e.target.value||null; Shots.cfg.motorId=nearestMotorId(Shots.deviceRpm()); shotChanged(); });
   $("#shotFeed").addEventListener("change",e=>{ if(!Shots.cfg) return; Shots.cfg.feeder=e.target.value||null; shotChanged(); });
-  $("#frontSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
-    OPTS.front=b.dataset.front; Sim.footprint=footprintOf(CAD,OPTS.front);
-    Sim.obstacles=Field.ok?Field.obstacles(Sim.footprint.h):[];
-    syncOptionControls(); saveRig(); });
+  // the drawn parts: which way the CAD faces, and whether to draw a base and a shooter
+  const robotSeg=(id,apply)=>$(id).addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    apply(b); refitRobot(); syncOptionControls(); saveRig(); ShotUI.dirty=true; });
+  robotSeg("#frontSeg",b=>OPTS.front=b.dataset.front);
+  robotSeg("#baseSeg",b=>OPTS.baseModel=b.dataset.mode);
+  robotSeg("#shooterSeg",b=>OPTS.shooterModel=b.dataset.mode);
+}
+/* The drive base, footprint and obstacles follow the drawn-parts settings
+   without restarting the OpMode. */
+function refitRobot(){
+  if(!CAD) return;
+  Sim.base=robotBase(CAD,Sim.drivetrain,OPTS.baseModel,OPTS.front);
+  Sim.footprint=footprintOf(CAD,OPTS.front,Sim.base);
+  Sim.obstacles=Field.ok?Field.obstacles(Sim.footprint.h):[];
+  if(Field.ok) Field.collide(Sim.chassis,Sim.footprint,Sim.obstacles);
 }
 
 /* ============================================================
    ORCHESTRATION
    ============================================================ */
-function renderLegend3D(){
-  const COL={"revolute-yaw":"#E0A42E","revolute-lift":"#4D9FFF","effector":"#3FB68B","linear":"#8C9EFF","fixed":"#8899AA"};
-  const shown=CAD.mechs.filter(m=>m.kind!=="fixed").slice(0,6);
-  $("#vpLegend").innerHTML=shown.map(m=>{
-    const n=rigCarries(CAD.mechs,m.id).length;
-    return `<span><i style="background:${COL[m.kind]||"#8899AA"}"></i>${esc(mlabel(m))} · ${JOINT_KINDS[m.kind].label}${n?" +"+n:""}</span>`;
-  }).join("")+(Sim.drivetrain&&Sim.drivetrain.ok?`<span><i style="background:#C3CEDB"></i>drive base · ${Sim.drivetrain.style}</span>`:"");
-  $("#pip").hidden=!liftState().aS;
-}
+/* The arm-torque picture only when the OpMode drives a lift joint. */
+function renderLegend3D(){ $("#pip").hidden=!liftState().aS; }
 function analyzeAll(){
   if(!CODE||!CAD) return;
   FINDINGS=analyze(CODE,CAD,MAP,OPTS);
@@ -1138,14 +1216,17 @@ function syncOptionControls(){
   $("#dutySlider").value=d; $("#dutyVal").textContent=d+" %";
   $("#turretSlider").value=t; $("#turretVal").textContent=t+" %";
   $$("#frontSeg button").forEach(b=>b.classList.toggle("on",b.dataset.front===OPTS.front));
+  $$("#baseSeg button").forEach(b=>b.classList.toggle("on",b.dataset.mode===OPTS.baseModel));
+  $$("#shooterSeg button").forEach(b=>b.classList.toggle("on",b.dataset.mode===OPTS.shooterModel));
 }
 function loadCAD(cad,label,cls){
   CAD=cad;
   $("#cadStatus").textContent=label; $("#cadDrop").className="drop "+(cls||"ok");
-  $("#vpTitle").textContent=(cad.name||label)+" · "+(cad.points?cad.points.length.toLocaleString():"0")+" pts · "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s")+(Field.ok?" · BIOBUZZ field":"");
+  const parts=cad.solids&&cad.solids.length?cad.solids.length+" parts":(cad.points?cad.points.length.toLocaleString():"0")+" pts";
+  $("#vpTitle").textContent=(cad.name||label)+" · "+parts+" · "+cad.mechs.length+" mechanism"+(cad.mechs.length===1?"":"s")+(Field.ok?" · BIOBUZZ field":"");
   const b=cad.bbox, mm=v=>(v*1000).toFixed(0);
   $("#vpDims").textContent=`${mm(b.max[0]-b.min[0])} × ${mm(b.max[1]-b.min[1])} × ${mm(b.max[2]-b.min[2])} mm`;
-  RIG_DEVICES={}; HW_USER={}; Shots.cfg=null; OPTS.front="+x";
+  RIG_DEVICES={}; HW_USER={}; Shots.cfg=null; OPTS.front="+x"; OPTS.baseModel="auto"; OPTS.shooterModel="auto";
   const restored=loadSavedRig();
   View.load(cad);
   if(Sim.phase!=="running") placeAtStart();
@@ -1216,57 +1297,210 @@ function wirePageDrop(){
 }
 
 /* ============================================================
-   KEYBOARD & USB GAMEPAD
+   KEYBOARD — each key presses the gamepad the code reads it from,
+   so I J K L drive a gamepad1 drivetrain even while gamepad2 is on screen
    ============================================================ */
 const KEYMAP={KeyA:"a",KeyB:"b",KeyX:"x",KeyY:"y",KeyQ:"left_bumper",KeyE:"right_bumper",
   ArrowUp:"dpad_up",ArrowDown:"dpad_down",ArrowLeft:"dpad_left",ArrowRight:"dpad_right"};
 const STICKKEYS={KeyI:["left_stick_y",-1],KeyK:["left_stick_y",1],KeyJ:["left_stick_x",-1],KeyL:["left_stick_x",1],
                  KeyU:["right_stick_x",-1],KeyO:["right_stick_x",1]};
+const KEY_PAD={};                   // which gamepad each held key went to
 const typing=e=>{ const t=e.target.tagName; return t==="TEXTAREA"||t==="INPUT"||t==="SELECT"||(e.target.dataset&&e.target.dataset.stick)||(e.target.getAttribute&&e.target.getAttribute("role")==="tab"); };
-function knobTo(axis,v){
+function knobTo(pad,axis,v){
+  if(pad!==activePad) return;
   for(const k of STICKS){
     if(k.ax!==axis&&k.ay!==axis) continue;
     const knob=$(`[data-knob="${k.id}"]`); if(!knob) continue;
     if(k.ax===axis) knob.setAttribute("cx",k.cx+v*(k.r-7)); else knob.setAttribute("cy",k.cy+v*(k.r-7));
   }
 }
+function releaseKey(code){
+  const p=KEY_PAD[code]; if(p==null) return; delete KEY_PAD[code];
+  const sk=STICKKEYS[code];
+  if(sk){ Sim.pad[p][sk[0]]=0; knobTo(p,sk[0],0); return; }
+  const b=KEYMAP[code]; if(!b) return;
+  Sim.pad[p][b]=false;
+  const el=$(`#padwrap [data-btn="${b}"]`); if(el&&p===activePad) el.classList.remove("down");
+}
 addEventListener("keydown",e=>{
   if(typing(e)||e.ctrlKey||e.metaKey||e.altKey) return;
+  if(e.code==="BracketLeft"||e.code==="BracketRight"){ const side=e.code==="BracketLeft"?"left":"right";
+    setRail(side,$("#app").classList.contains(side+"-closed")); return; }
   if(e.code==="KeyF"&&!e.repeat){ e.preventDefault(); shotFire(); return; }
   const sk=STICKKEYS[e.code];
-  if(sk){ e.preventDefault(); Sim.pad[activePad][sk[0]]=sk[1]; knobTo(sk[0],sk[1]); return; }
+  if(sk){ e.preventDefault(); const p=padFor(CODE,sk[0],activePad); KEY_PAD[e.code]=p;
+    Sim.pad[p][sk[0]]=sk[1]; knobTo(p,sk[0],sk[1]); return; }
   const b=KEYMAP[e.code]; if(!b) return;
-  e.preventDefault(); Sim.pad[activePad][b]=true;
-  const el=$(`#padwrap [data-btn="${b}"]`); if(el) el.classList.add("down");
+  e.preventDefault(); const p=padFor(CODE,b,activePad); KEY_PAD[e.code]=p; Sim.pad[p][b]=true;
+  const el=$(`#padwrap [data-btn="${b}"]`); if(el&&p===activePad) el.classList.add("down");
 });
-addEventListener("keyup",e=>{
-  const sk=STICKKEYS[e.code];
-  if(sk){ Sim.pad[activePad][sk[0]]=0; knobTo(sk[0],0); return; }
-  const b=KEYMAP[e.code]; if(!b) return;
-  Sim.pad[activePad][b]=false;
-  const el=$(`#padwrap [data-btn="${b}"]`); if(el) el.classList.remove("down");
-});
-const HW_ORDER=["a","b","x","y","left_bumper","right_bumper","left_trigger","right_trigger",
-  "back","start","left_stick_button","right_stick_button","dpad_up","dpad_down","dpad_left","dpad_right","guide"];
-let hwWas=null;
-function pollHW(){
-  const gps=navigator.getGamepads?navigator.getGamepads():[];
-  let live=false;
-  for(let i=0;i<gps.length&&i<2;i++){
-    const g=gps[i]; if(!g) continue; live=true;
-    const pad=i+1;
-    g.buttons.forEach((b,j)=>{ const n=HW_ORDER[j]; if(!n) return;
-      // triggers are analog on the SDK: expose the value, not just pressed
-      Sim.pad[pad][n]=(n==="left_trigger"||n==="right_trigger")?b.value:b.pressed;
-      if(pad===activePad){ const el=$(`#padwrap [data-btn="${n}"]`); if(el) el.classList.toggle("down",b.pressed); } });
-    const dz=v=>Math.abs(v)<0.08?0:v;
-    if(g.axes.length>=4){
-      Sim.pad[pad].left_stick_x=dz(g.axes[0]); Sim.pad[pad].left_stick_y=dz(g.axes[1]);
-      Sim.pad[pad].right_stick_x=dz(g.axes[2]); Sim.pad[pad].right_stick_y=dz(g.axes[3]);
+addEventListener("keyup",e=>releaseKey(e.code));
+addEventListener("blur",()=>Object.keys(KEY_PAD).forEach(releaseKey));
+
+/* ============================================================
+   CONTROLLERS — plug in a real gamepad and it drives the OpMode
+   ============================================================ */
+const Pads={
+  assign:{},                        // controller index → gamepad 1 | 2, or 0 for off
+  deadzone:0.08, blocked:false, sig:"", lastBuzz:{},
+  init(){
+    const dz=parseFloat(store.get("ftcbench.deadzone","0.08")); this.deadzone=isFinite(dz)?dz:0.08;
+    try{ const fp=document.featurePolicy||document.permissionsPolicy;
+      if(fp&&fp.allowsFeature&&!fp.allowsFeature("gamepad")) this.blocked=true; }catch(e){}
+    try{ if(navigator.getGamepads) navigator.getGamepads(); }catch(e){ this.blocked=true; }
+    addEventListener("gamepadconnected",e=>this.connect(e.gamepad));
+    addEventListener("gamepaddisconnected",e=>{ delete this.assign[e.gamepad.index]; this.render(); });
+    $("#ctrlChip").addEventListener("click",()=>this.toggle());
+    $("#ctrlClose").addEventListener("click",()=>this.toggle(false));
+    document.addEventListener("pointerdown",e=>{ if(!$("#ctrlPanel").hidden&&!e.target.closest(".ctrl-wrap")) this.toggle(false); });
+    addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("#ctrlPanel").hidden) this.toggle(false); });
+    $("#deadzone").value=this.deadzone; $("#deadzoneVal").textContent=this.deadzone.toFixed(2);
+    $("#deadzone").addEventListener("input",e=>{ this.deadzone=+e.target.value;
+      $("#deadzoneVal").textContent=this.deadzone.toFixed(2); store.set("ftcbench.deadzone",String(this.deadzone)); });
+    $("#ctrlList").addEventListener("click",e=>{ const b=e.target.closest("[data-assign]"); if(b) this.set(+b.dataset.idx,+b.dataset.assign); });
+    Sim.onRumble=(pad,meth,args)=>this.rumble(pad,meth,args);
+    this.render();
+  },
+  list(){
+    if(this.blocked||!navigator.getGamepads) return [];
+    try{ return [].slice.call(navigator.getGamepads()).filter(Boolean); }catch(e){ this.blocked=true; return []; }
+  },
+  /* A new controller takes the gamepad this OpMode reads most, unless
+     another controller already has it. */
+  connect(gp){
+    if(this.assign[gp.index]==null){
+      const taken=Object.keys(this.assign).map(k=>this.assign[k]);
+      const want=busiestPad(CODE), other=want===1?2:1;
+      this.assign[gp.index]=taken.indexOf(want)<0?want:(taken.indexOf(other)<0?other:0);
     }
+    this.render();
+  },
+  set(idx,pad){
+    if(pad) for(const k in this.assign) if(+k!==idx&&this.assign[k]===pad) this.assign[k]=0;   // one controller per gamepad
+    this.assign[idx]=pad;
+    if(pad) setActivePad(pad); else this.render();
+  },
+  /* A lone controller follows the OpMode: gamepad2 for a claw TeleOp,
+     gamepad1 for a drive TeleOp. */
+  defaults(){
+    const gps=this.list();
+    if(gps.length===1&&this.assign[gps[0].index]!==0) this.assign[gps[0].index]=busiestPad(CODE);
+    this.render();
+  },
+  padOf(p){ return this.list().filter(g=>this.assign[g.index]===p)[0]||null; },
+  poll(){
+    const gps=this.list();
+    for(const g of gps){
+      if(this.assign[g.index]==null) this.connect(g);        // some browsers skip the connect event
+      const p=this.assign[g.index]; if(!p) continue;
+      const s=padFromGamepad(g,this.deadzone), dst=Sim.pad[p];
+      for(const k in s) dst[k]=s[k];
+    }
+    const sig=gps.map(g=>g.index+":"+this.assign[g.index]).join(",");
+    if(sig!==this.sig){ this.sig=sig; this.render(); }
+  },
+  /* The on-screen gamepad mirrors a real controller on the pad it shows. */
+  mirror(){
+    if(!this.padOf(activePad)) return;
+    const st=Sim.pad[activePad];
+    $$("#padwrap [data-btn]").forEach(el=>{ const v=st[el.dataset.btn]; el.classList.toggle("down",typeof v==="number"?v>0.2:!!v); });
+    for(const k of STICKS){ const knob=$(`[data-knob="${k.id}"]`); if(!knob) continue;
+      knob.setAttribute("cx",k.cx+(st[k.ax]||0)*(k.r-7)); knob.setAttribute("cy",k.cy+(st[k.ay]||0)*(k.r-7)); }
+  },
+  /* gamepad1.rumble(…) in the OpMode buzzes the real controller */
+  rumble(pad,meth,args){
+    const g=this.padOf(pad), act=g&&g.vibrationActuator; if(!act||!act.playEffect) return;
+    const key=pad+meth+args.join(","), now=performance.now();
+    if(this.lastBuzz[pad]&&this.lastBuzz[pad].key===key&&now-this.lastBuzz[pad].t<250) return;
+    this.lastBuzz[pad]={key,t:now};
+    try{
+      if(meth==="stopRumble"){ if(act.reset) act.reset(); return; }
+      const ms=meth==="rumbleBlips"?Math.max(1,args[0]||1)*160:(args.length>=3?args[2]:args[0])||250;
+      const s=meth==="rumble"&&args.length>=3?[args[0],args[1]]:[1,1];
+      act.playEffect("dual-rumble",{duration:Math.min(2000,ms), strongMagnitude:clamp01(s[0]), weakMagnitude:clamp01(s[1])});
+    }catch(e){}
+  },
+  renderChip(){
+    const chip=$("#ctrlChip"), lab=$("#ctrlLabel"); if(!chip) return;
+    const gps=this.list(), used=gps.filter(g=>this.assign[g.index]);
+    chip.classList.toggle("live",used.length>0);
+    lab.textContent=this.blocked?"Controller":used.length?used.map(g=>"gamepad"+this.assign[g.index]).join(" + "):gps.length?"Controller off":"Controller";
+    chip.title=used.length?used.map(g=>padName(g.id)+" → gamepad"+this.assign[g.index]).join("\n"):"Plug in a controller";
+    const live=$("#padLive"); if(live) live.hidden=!this.padOf(activePad);
+  },
+  render(){
+    this.renderChip();
+    const box=$("#ctrlList"); if(!box) return;
+    const gps=this.list();
+    if(this.blocked){ setHTML(box,`<div class="ctrl-empty">This embedded view isn't allowed to read controllers. Open the bench in its own tab — <a href="https://lilrino71.github.io/ftc-sim-bench/" target="_blank" rel="noopener">lilrino71.github.io/ftc-sim-bench</a> — and they work there.</div>`); return; }
+    if(!gps.length){ setHTML(box,`<div class="ctrl-empty"><b>No controller yet.</b> Plug one in over USB or Bluetooth, then press any button on it.</div>`); return; }
+    setHTML(box,gps.map(g=>{ const p=this.assign[g.index]||0;
+      return `<div class="ctrl-row"><div class="ctrl-name" title="${esc(g.id)}">${esc(padName(g.id))}</div>
+        <div class="seg">${[1,2,0].map(v=>`<button type="button" data-idx="${g.index}" data-assign="${v}" class="${p===v?"on":""}">${v?"gamepad"+v:"off"}</button>`).join("")}</div>
+        <div class="ctrl-sub">${g.mapping==="standard"?"standard layout":"unusual layout — some buttons may be swapped"}${g.vibrationActuator?" · rumbles when the code asks":""}</div>
+        <div class="ctrl-bars" data-bars="${g.index}" aria-hidden="true">${"<i></i>".repeat(10)}</div></div>`; }).join(""));
+  },
+  /* Activity lights in the open panel: face buttons, bumpers, sticks. */
+  meters(){
+    if($("#ctrlPanel").hidden) return;
+    for(const g of this.list()){
+      const el=$(`[data-bars="${g.index}"]`); if(!el) continue;
+      const b=i=>g.buttons[i]&&g.buttons[i].pressed, a=i=>Math.abs(g.axes[i]||0)>0.3;
+      const v=[b(0),b(1),b(2),b(3),b(4),b(5),a(0)||a(1),a(2)||a(3),b(12)||b(13)||b(14)||b(15),(g.buttons[6]&&g.buttons[6].value>0.2)||(g.buttons[7]&&g.buttons[7].value>0.2)];
+      el.querySelectorAll("i").forEach((i,k)=>i.classList.toggle("on",!!v[k]));
+    }
+  },
+  toggle(open){
+    const p=$("#ctrlPanel"), o=open==null?p.hidden:open;
+    p.hidden=!o; $("#ctrlChip").setAttribute("aria-expanded",String(o));
+    if(o) this.render();
   }
-  if(live!==hwWas){ hwWas=live; const p=$("#hwPad"); p.textContent=live?"USB pad live":"no USB pad"; p.className="pill"+(live?" live":""); }
+};
+
+/* ============================================================
+   JAVA — the OpMode's source, highlighted, with the lines the
+   bench can't run marked in the gutter
+   ============================================================ */
+const JAVA_RE=/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|(@[A-Za-z_]\w*)|\b(gamepad[12]\.\w+)|\b(package|import|public|private|protected|static|final|abstract|class|interface|enum|extends|implements|void|if|else|while|for|do|switch|case|default|break|continue|return|new|try|catch|finally|throw|throws|this|super|true|false|null|double|int|long|float|boolean|char|byte|short|var|instanceof|synchronized|volatile)\b|\b(\d+(?:\.\d+)?[fFdDlL]?)\b|\b([A-Z][A-Za-z0-9_]*)\b/g;
+function highlightJava(src){
+  let out="", last=0, m;
+  JAVA_RE.lastIndex=0;
+  while((m=JAVA_RE.exec(src))){
+    out+=esc(src.slice(last,m.index));
+    const cls=m[1]?"c":m[2]?"s":m[3]?"a":m[4]?"g":m[5]?"k":m[6]?"n":"t";
+    out+=`<span class="${cls}">${esc(m[0])}</span>`;
+    last=JAVA_RE.lastIndex;
+  }
+  return out+esc(src.slice(last));
 }
+const Editor={
+  skip:{},
+  init(){
+    this.ta=$("#srcbox"); this.hl=$("#edHl"); this.gut=$("#edGutter");
+    this.ta.addEventListener("input",()=>{ clearTimeout(this.tm); this.tm=setTimeout(()=>this.refresh(),110); });
+    this.ta.addEventListener("scroll",()=>this.sync());
+    this.ta.addEventListener("keydown",e=>{
+      if(e.key==="Tab"&&!e.shiftKey&&!e.ctrlKey&&!e.altKey&&!e.metaKey){
+        e.preventDefault();
+        if(!(document.execCommand&&document.execCommand("insertText",false,"    "))){
+          this.ta.setRangeText("    ",this.ta.selectionStart,this.ta.selectionEnd,"end"); this.refresh(); }
+      }
+      if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){ e.preventDefault(); $("#reparse").click(); }
+    });
+  },
+  set(text){ if(!this.ta) return; this.ta.value=text; this.ta.scrollTop=0; this.ta.scrollLeft=0; this.refresh(); },
+  marks(lines){ this.skip={}; for(const l of lines||[]) if(l) this.skip[l]=1; this.refresh(); },
+  refresh(){
+    if(!this.ta) return;
+    const v=this.ta.value;
+    this.hl.innerHTML=highlightJava(v)+"\n";
+    const n=v.split("\n").length; let g="";
+    for(let i=1;i<=n;i++) g+=(this.skip[i]?`<b title="The bench can't run this line">● ${i}</b>`:i)+"\n";
+    this.gut.innerHTML=g;
+    this.sync();
+  },
+  sync(){ this.hl.scrollTop=this.ta.scrollTop; this.hl.scrollLeft=this.ta.scrollLeft; this.gut.scrollTop=this.ta.scrollTop; }
+};
 
 /* ============================================================
    MAIN LOOP
@@ -1276,14 +1510,15 @@ function guarded(fn){ try{ fn(); }catch(e){ if(!loopErr){ loopErr=e; console.err
 function frame(now){
   const dt=Math.min(0.1,(now-last)/1000); last=now;
   guarded(()=>{
-    pollHW();
+    Pads.poll();
     acc+=dt; let n=0;
     while(acc>=0.02&&n++<8){ Sim.tick(0.02); acc-=0.02; }
     if(acc>0.5) acc=0;
-    View.update(); View.render(); updateGauges();
+    View.update(); View.render(); updateGauges(); Pads.mirror();
   });
   slowAcc+=dt;
   if(slowAcc>=0.05){ slowAcc=0; guarded(()=>{
+    Pads.meters();
     Graph.sample(); Graph.draw(); Graph.updateLegendValues();
     $("#dsPanel").innerHTML=renderDS();
     updateClock(); updateConfigValues();
@@ -1317,14 +1552,23 @@ function frame(now){
   ShotUI.arc=store.get("ftcbench.arc","1")!=="0"; $("#arcToggle").checked=ShotUI.arc;
   View.init($("#viewport"));
   View.setView("iso");
-  initTabs();
+  initTabs(); initCollapsibles(); initRails();
+  Editor.init(); Pads.init();
   initLibrary();
+  // drag the robot anywhere on the field; it still can't pass through the HIVE or the walls
+  View.onRobotDrag=p=>{
+    const ch={x:p.x, y:p.y, h:p.h};
+    if(Field.ok&&Sim.footprint) Field.collide(ch,Sim.footprint,Sim.obstacles);
+    Sim.chassis=ch; Sim.vel={x:0,y:0}; OPTS.startPose=Object.assign({},ch);
+  };
+  View.onHover=over=>{ $("#vpTip").hidden=!over; };
 
   try{ const rc=JSON.parse(store.get("ftcbench.robotconfig","null")); if(rc&&rc.text){ OPTS.robotConfig=parseRobotConfig(rc.text); ROBOT_CFG_NAME=rc.name;
     $("#cfgStatus").textContent=rc.name+" · "+OPTS.robotConfig.devices.length+" devices"; $("#cfgDrop").className="drop ok"; $("#cfgClear").hidden=false; } }catch(e){}
 
   const sample=JSON.parse(JSON.stringify(SAMPLE_CAD));
   sample.points=synthGeometry();
+  sample.solids=sampleSolids();
   classifyMechs(sample.mechs);
   loadCAD(sample,"sample: fulll.step (measured)","ok");
 
@@ -1398,8 +1642,7 @@ function frame(now){
     $$("#viewSeg button").forEach(x=>x.classList.toggle("on",x===b)); View.setView(b.dataset.v); });
   $("#resetPose").addEventListener("click",placeAtStart);
   wireShotTab();
-  $("#padSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
-    activePad=+b.dataset.pad; $$("#padSeg button").forEach(x=>x.classList.toggle("on",x===b)); renderPad(); });
+  $("#padSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) setActivePad(+b.dataset.pad); });
 
   // graph & compare
   $("#winSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
@@ -1427,11 +1670,12 @@ function frame(now){
     }
     const v=q.get("view");
     if(v&&/^(iso|front|side|top|field)$/.test(v)){ View.setView(v); $$("#viewSeg button").forEach(x=>x.classList.toggle("on",x.dataset.v===v)); }
-    ["left","right"].forEach(side=>{ const t=q.get(side), nav=$(`.tabs[data-tabs="${side}"]`);
+    ["left","right"].forEach(side=>{ const t=TAB_RENAMED[q.get(side)]||q.get(side), nav=$(`.tabs[data-tabs="${side}"]`);
       if(t&&nav&&nav.querySelector(`button[data-tab="${t}"]`)) selectTab(nav,t); });
     if(q.get("start")==="1") dsStart();
   }catch(e){}
 
   saveRig();
+  RAILS_READY=true;
   requestAnimationFrame(frame);
 })();

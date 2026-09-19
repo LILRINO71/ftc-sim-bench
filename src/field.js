@@ -166,12 +166,28 @@ function capsulePush(ch,fp,o){
   return [(best[0]*c-best[1]*s)*pen, (best[0]*s+best[1]*c)*pen];
 }
 
-/* The robot's footprint in its own frame (forward = +x) from the CAD box
-   and which way the CAD's front faces. */
-function footprintOf(cad,front){
+/* The robot's footprint in its own frame (forward = +x) from the CAD box,
+   which way the CAD's front faces, and the drive base under it if any. */
+function footprintOf(cad,front,base){
   const b=cad&&cad.bbox;
-  if(!b) return {hx:0.2286, hy:0.2286, h:0.35};
-  const ex=Math.max(0.05,(b.max[0]-b.min[0])/2), ey=Math.max(0.05,(b.max[1]-b.min[1])/2);
-  const side=/y/.test(front||"+x");
-  return {hx:side?ey:ex, hy:side?ex:ey, h:Math.max(0.05,b.max[2]-b.min[2])};
+  let fp={hx:0.2286, hy:0.2286, h:0.35};
+  if(b){
+    const ex=Math.max(0.05,(b.max[0]-b.min[0])/2), ey=Math.max(0.05,(b.max[1]-b.min[1])/2);
+    const side=/y/.test(front||"+x");
+    fp={hx:side?ey:ex, hy:side?ex:ey, h:Math.max(0.05,b.max[2]-b.min[2])};
+  }
+  if(base) fp={hx:Math.max(fp.hx,base.L/2), hy:Math.max(fp.hy,base.W/2), h:fp.h+base.H};
+  return fp;
+}
+
+/* A drive base drawn under the CAD when the code drives but the CAD has no
+   wheels — a CAD of just an arm still becomes a robot you can drive. */
+const BASE_H=0.078;
+function robotBase(cad,drivetrain,mode,front){
+  if(mode==="hide") return null;
+  const hasWheels=((cad&&cad.parts)||[]).some(p=>/wheel|mecanum|omni|traction/i.test(p.name||""));
+  if(mode!=="show"&&(hasWheels||!(drivetrain&&drivetrain.ok))) return null;
+  const f=footprintOf(cad,front,null), cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+  return {L:cl(2*f.hx,0.38,0.457), W:cl(2*f.hy,0.34,0.457), H:BASE_H, wheelR:0.052, wheelW:0.038,
+          style:(drivetrain&&drivetrain.style)||"mecanum"};
 }

@@ -13,9 +13,7 @@ const Sim={
     const sp=(opts&&opts.startPose)||{x:0,y:0,h:0};
     this.chassis={x:sp.x,y:sp.y,h:sp.h};
     this.code=code; this.cad=cad; this.map=map; this.opts=opts;
-    this.footprint=footprintOf(cad,opts&&opts.front);
-    this.obstacles=Field.ok?Field.obstacles(this.footprint.h):[];
-    this.bump=null;
+    this.bump=null; this.vel={x:0,y:0};
     this.pc=0; this.sleepEnd=null; this.sleptMs=0; this.autoDone=false;
     for(const d of code.devices){
       const mech=cad.mechs.filter(m=>m.id===map[d.name])[0]||null;
@@ -32,6 +30,10 @@ const Sim={
     for(const n of (code.timers||[])) this.timers[n]=0;
     this.dt=0.02;
     this.drivetrain=detectDrivetrain(code);
+    // a CAD of just a mechanism still drives on a drawn drive base
+    this.base=robotBase(cad,this.drivetrain,opts&&opts.baseModel,opts&&opts.front);
+    this.footprint=footprintOf(cad,opts&&opts.front,this.base);
+    this.obstacles=Field.ok?Field.obstacles(this.footprint.h):[];
     this.phase="loaded";
   },
   /* INIT: everything before waitForStart() — directions, PID objects, start positions. */
@@ -153,6 +155,8 @@ const Sim={
         else if(/^set(PID|PIDF|P|I|D)$|^reset$/.test(st.meth) && !s)
           this.pidOp(st.obj,st.meth,st.args.map(x=>evalNode(x,env)));
         else if(st.meth==="resetYaw") this.chassis.h=0;
+        else if(/^gamepad[12]$/.test(st.obj)&&this.onRumble&&/^(rumble|rumbleBlips|stopRumble)$/.test(st.meth))
+          this.onRumble(+st.obj.slice(-1),st.meth,st.args.map(x=>evalNode(x,env)));   // a real controller buzzes
       }
       // "while" and "unknown" nodes only mean something to the autonomous stepper
     }
@@ -229,7 +233,8 @@ const Sim={
   },
   driveChassis(dt){
     const dtn=this.drivetrain;
-    if(!dtn||!dtn.ok){ return; }
+    if(!dtn||!dtn.ok){ this.vel={x:0,y:0}; return; }
+    const x0=this.chassis.x, y0=this.chassis.y;
     let L=0,R=0,nl=0,nr=0,strafe=0;
     for(const w of dtn.wheels){
       const s=this.dev[w.dev]; if(!s) continue;
@@ -247,10 +252,14 @@ const Sim={
     this.chassis.h += w*dt;
     this.chassis.x += (v*Math.cos(this.chassis.h) - strafe*SPEED*Math.sin(this.chassis.h))*dt;
     this.chassis.y += (v*Math.sin(this.chassis.h) + strafe*SPEED*Math.cos(this.chassis.h))*dt;
-    if(Field.ok){ this.bump=Field.collide(this.chassis,this.footprint,this.obstacles); return; }
-    const LIM=1.78;                            // half a nominal 12 ft field
-    this.chassis.x=Math.max(-LIM,Math.min(LIM,this.chassis.x));
-    this.chassis.y=Math.max(-LIM,Math.min(LIM,this.chassis.y));
+    if(Field.ok) this.bump=Field.collide(this.chassis,this.footprint,this.obstacles);
+    else {
+      const LIM=1.78;                          // half a nominal 12 ft field
+      this.chassis.x=Math.max(-LIM,Math.min(LIM,this.chassis.x));
+      this.chassis.y=Math.max(-LIM,Math.min(LIM,this.chassis.y));
+    }
+    // what the robot actually did, walls included — a moving shot carries it
+    this.vel={x:(this.chassis.x-x0)/dt, y:(this.chassis.y-y0)/dt};
   }
 };
 const clamp01=v=>Math.max(0,Math.min(1,v));
